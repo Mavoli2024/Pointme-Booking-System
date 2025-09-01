@@ -52,6 +52,7 @@ export default function BusinessDashboard() {
     totalCustomers: 0,
     averageRating: 0
   })
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
 
   useEffect(() => {
     fetchBusinessData()
@@ -61,7 +62,11 @@ export default function BusinessDashboard() {
     try {
       const supabase = createClient()
       
+      console.log('🔍 Fetching business data...')
+      console.log('📊 Supabase client created:', !!supabase)
+      
       // Fetch bookings
+      console.log('📅 Fetching bookings...')
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
@@ -81,35 +86,56 @@ export default function BusinessDashboard() {
         `)
         .order('created_at', { ascending: false })
 
-      if (bookingsError) throw bookingsError
+      if (bookingsError) {
+        console.error('❌ Bookings error:', bookingsError)
+        throw new Error(`Bookings fetch failed: ${bookingsError.message}`)
+      }
+      
+      console.log('✅ Bookings fetched:', bookingsData?.length || 0)
 
       // Fetch users (customers)
+      console.log('👥 Fetching users...')
       const { data: usersData, error: usersError } = await supabase
         .from('users')
         .select('*')
         .eq('role', 'customer')
         .order('created_at', { ascending: false })
 
-      if (usersError) throw usersError
+      if (usersError) {
+        console.error('❌ Users error:', usersError)
+        throw new Error(`Users fetch failed: ${usersError.message}`)
+      }
+      console.log('✅ Users fetched:', usersData?.length || 0)
 
       // Fetch services
+      console.log('🔧 Fetching services...')
       const { data: servicesData, error: servicesError } = await supabase
         .from('services')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (servicesError) throw servicesError
+      if (servicesError) {
+        console.error('❌ Services error:', servicesError)
+        throw new Error(`Services fetch failed: ${servicesError.message}`)
+      }
+      console.log('✅ Services fetched:', servicesData?.length || 0)
 
       // Fetch staff (users with business role)
+      console.log('👨‍💼 Fetching staff...')
       const { data: staffData, error: staffError } = await supabase
         .from('users')
         .select('*')
         .eq('role', 'business')
         .order('created_at', { ascending: false })
 
-      if (staffError) throw staffError
+      if (staffError) {
+        console.error('❌ Staff error:', staffError)
+        throw new Error(`Staff fetch failed: ${staffError.message}`)
+      }
+      console.log('✅ Staff fetched:', staffData?.length || 0)
 
       // Fetch support tickets (if table exists)
+      console.log('🎫 Fetching support tickets...')
       let ticketsData = []
       try {
         const { data: tickets, error: ticketsError } = await supabase
@@ -119,13 +145,17 @@ export default function BusinessDashboard() {
         
         if (!ticketsError) {
           ticketsData = tickets || []
+          console.log('✅ Support tickets fetched:', ticketsData.length)
+        } else {
+          console.log('⚠️ Support tickets table not accessible:', ticketsError.message)
         }
       } catch (e) {
-        // Table might not exist yet
+        console.log('⚠️ Support tickets table might not exist yet')
         ticketsData = []
       }
 
       // Fetch reviews (if table exists)
+      console.log('⭐ Fetching reviews...')
       let reviewsData = []
       try {
         const { data: reviews, error: reviewsError } = await supabase
@@ -135,13 +165,17 @@ export default function BusinessDashboard() {
         
         if (!reviewsError) {
           reviewsData = reviews || []
+          console.log('✅ Reviews fetched:', reviewsData.length)
+        } else {
+          console.log('⚠️ Reviews table not accessible:', reviewsError.message)
         }
       } catch (e) {
-        // Table might not exist yet
+        console.log('⚠️ Reviews table might not exist yet')
         reviewsData = []
       }
 
       // Calculate business stats
+      console.log('📊 Calculating business stats...')
       const totalBookings = bookingsData?.length || 0
       const totalRevenue = bookingsData?.reduce((sum, booking) => {
         const service = booking.services
@@ -151,6 +185,8 @@ export default function BusinessDashboard() {
       const averageRating = reviewsData?.length > 0 
         ? (reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewsData.length).toFixed(1)
         : 0
+
+      console.log('📈 Stats calculated:', { totalBookings, totalRevenue, totalCustomers, averageRating })
 
       setBookings(bookingsData || [])
       setUsers(usersData || [])
@@ -165,9 +201,32 @@ export default function BusinessDashboard() {
         averageRating: typeof averageRating === 'string' ? parseFloat(averageRating) : averageRating
       })
       
+      console.log('✅ All data set successfully')
+      setConnectionStatus('connected')
       setLoading(false)
     } catch (error) {
-      console.error('Error fetching business data:', error)
+      console.error('❌ Error fetching business data:', error)
+      
+      // Set fallback data when Supabase is not available
+      if (error instanceof Error && error.message.includes('Supabase')) {
+        console.log('🔄 Setting fallback data for development...')
+        setBookings([])
+        setUsers([])
+        setServices([])
+        setStaff([])
+        setSupportTickets([])
+        setReviews([])
+        setBusinessStats({
+          totalBookings: 0,
+          totalRevenue: 0,
+          totalCustomers: 0,
+          averageRating: 0
+        })
+        setConnectionStatus('disconnected')
+      } else {
+        setConnectionStatus('disconnected')
+      }
+      
       setLoading(false)
     }
   }
@@ -175,7 +234,11 @@ export default function BusinessDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg text-muted-foreground">Loading business dashboard...</p>
+          <p className="text-sm text-muted-foreground mt-2">Connecting to database...</p>
+        </div>
       </div>
     )
   }
@@ -183,12 +246,24 @@ export default function BusinessDashboard() {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Business Dashboard</h1>
-            <p className="text-muted-foreground">Manage your business operations and track performance</p>
-          </div>
+                 {/* Header */}
+         <div className="flex justify-between items-center">
+           <div>
+             <h1 className="text-3xl font-bold">Business Dashboard</h1>
+             <p className="text-muted-foreground">Manage your business operations and track performance</p>
+             <div className="flex items-center space-x-2 mt-2">
+               <div className={`w-2 h-2 rounded-full ${
+                 connectionStatus === 'connected' ? 'bg-green-500' :
+                 connectionStatus === 'disconnected' ? 'bg-red-500' :
+                 'bg-yellow-500'
+               }`}></div>
+               <span className="text-sm text-muted-foreground">
+                 {connectionStatus === 'connected' ? 'Connected to Database' :
+                  connectionStatus === 'disconnected' ? 'Database Disconnected' :
+                  'Checking Connection...'}
+               </span>
+             </div>
+           </div>
                      <div className="flex space-x-3">
              <Button variant="outline" onClick={fetchBusinessData}>
                <RefreshCw className="h-4 w-4 mr-2" />
@@ -215,7 +290,10 @@ export default function BusinessDashboard() {
              <CardContent>
                <div className="text-2xl font-bold">{businessStats.totalBookings}</div>
                <p className="text-xs text-muted-foreground">
-                 {bookings.filter(b => b.status === 'pending').length} pending
+                 {connectionStatus === 'connected' 
+                   ? `${bookings.filter(b => b.status === 'pending').length} pending`
+                   : 'Database connection required'
+                 }
                </p>
              </CardContent>
            </Card>
@@ -312,7 +390,7 @@ export default function BusinessDashboard() {
                      ))}
                      {bookings.length === 0 && (
                        <div className="text-center py-4 text-muted-foreground">
-                         No bookings yet
+                         {connectionStatus === 'connected' ? 'No bookings yet' : 'Database connection required to view bookings'}
                        </div>
                      )}
                    </div>
