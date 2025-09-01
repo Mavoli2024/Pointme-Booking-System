@@ -30,18 +30,147 @@ import {
   MapPin,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from "lucide-react"
 import { createClient } from "@/lib/supabase"
 
 export default function BusinessDashboard() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
+  
+  // Data states
+  const [bookings, setBookings] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
+  const [services, setServices] = useState<any[]>([])
+  const [staff, setStaff] = useState<any[]>([])
+  const [supportTickets, setSupportTickets] = useState<any[]>([])
+  const [reviews, setReviews] = useState<any[]>([])
+  const [businessStats, setBusinessStats] = useState({
+    totalBookings: 0,
+    totalRevenue: 0,
+    totalCustomers: 0,
+    averageRating: 0
+  })
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => setLoading(false), 1000)
+    fetchBusinessData()
   }, [])
+
+  const fetchBusinessData = async () => {
+    try {
+      const supabase = createClient()
+      
+      // Fetch bookings
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          users!bookings_user_id_fkey (
+            id,
+            name,
+            email,
+            phone
+          ),
+          services!bookings_service_id_fkey (
+            id,
+            name,
+            price,
+            duration
+          )
+        `)
+        .order('created_at', { ascending: false })
+
+      if (bookingsError) throw bookingsError
+
+      // Fetch users (customers)
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'customer')
+        .order('created_at', { ascending: false })
+
+      if (usersError) throw usersError
+
+      // Fetch services
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (servicesError) throw servicesError
+
+      // Fetch staff (users with business role)
+      const { data: staffData, error: staffError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'business')
+        .order('created_at', { ascending: false })
+
+      if (staffError) throw staffError
+
+      // Fetch support tickets (if table exists)
+      let ticketsData = []
+      try {
+        const { data: tickets, error: ticketsError } = await supabase
+          .from('support_tickets')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (!ticketsError) {
+          ticketsData = tickets || []
+        }
+      } catch (e) {
+        // Table might not exist yet
+        ticketsData = []
+      }
+
+      // Fetch reviews (if table exists)
+      let reviewsData = []
+      try {
+        const { data: reviews, error: reviewsError } = await supabase
+          .from('reviews')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (!reviewsError) {
+          reviewsData = reviews || []
+        }
+      } catch (e) {
+        // Table might not exist yet
+        reviewsData = []
+      }
+
+      // Calculate business stats
+      const totalBookings = bookingsData?.length || 0
+      const totalRevenue = bookingsData?.reduce((sum, booking) => {
+        const service = booking.services
+        return sum + (service?.price || 0)
+      }, 0) || 0
+      const totalCustomers = usersData?.length || 0
+      const averageRating = reviewsData?.length > 0 
+        ? (reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewsData.length).toFixed(1)
+        : 0
+
+      setBookings(bookingsData || [])
+      setUsers(usersData || [])
+      setServices(servicesData || [])
+      setStaff(staffData || [])
+      setSupportTickets(ticketsData)
+      setReviews(reviewsData)
+      setBusinessStats({
+        totalBookings,
+        totalRevenue,
+        totalCustomers,
+        averageRating: parseFloat(averageRating)
+      })
+      
+      setLoading(false)
+    } catch (error) {
+      console.error('Error fetching business data:', error)
+      setLoading(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -60,66 +189,78 @@ export default function BusinessDashboard() {
             <h1 className="text-3xl font-bold">Business Dashboard</h1>
             <p className="text-muted-foreground">Manage your business operations and track performance</p>
           </div>
-          <div className="flex space-x-3">
-            <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Export Report
-            </Button>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Service
-            </Button>
-          </div>
+                     <div className="flex space-x-3">
+             <Button variant="outline" onClick={fetchBusinessData}>
+               <RefreshCw className="h-4 w-4 mr-2" />
+               Refresh Data
+             </Button>
+             <Button variant="outline">
+               <Download className="h-4 w-4 mr-2" />
+               Export Report
+             </Button>
+             <Button>
+               <Plus className="h-4 w-4 mr-2" />
+               New Service
+             </Button>
+           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground">+5 pending</p>
-            </CardContent>
-          </Card>
+                 {/* Stats Cards */}
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+           <Card>
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+               <Calendar className="h-4 w-4 text-muted-foreground" />
+             </CardHeader>
+             <CardContent>
+               <div className="text-2xl font-bold">{businessStats.totalBookings}</div>
+               <p className="text-xs text-muted-foreground">
+                 {bookings.filter(b => b.status === 'pending').length} pending
+               </p>
+             </CardContent>
+           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">R12,450</div>
-              <p className="text-xs text-muted-foreground">+12% from last month</p>
-            </CardContent>
-          </Card>
+           <Card>
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+               <DollarSign className="h-4 w-4 text-muted-foreground" />
+             </CardHeader>
+             <CardContent>
+               <div className="text-2xl font-bold">R{businessStats.totalRevenue.toLocaleString()}</div>
+               <p className="text-xs text-muted-foreground">
+                 {bookings.length > 0 ? 'From all bookings' : 'No bookings yet'}
+               </p>
+             </CardContent>
+           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">18</div>
-              <p className="text-xs text-muted-foreground">+3 new this month</p>
-            </CardContent>
-          </Card>
+           <Card>
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+               <Users className="h-4 w-4 text-muted-foreground" />
+             </CardHeader>
+             <CardContent>
+               <div className="text-2xl font-bold">{businessStats.totalCustomers}</div>
+               <p className="text-xs text-muted-foreground">
+                 {users.filter(u => new Date(u.created_at).getMonth() === new Date().getMonth()).length} new this month
+               </p>
+             </CardContent>
+           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Rating</CardTitle>
-              <Star className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">4.8</div>
-              <p className="text-xs text-muted-foreground">Based on 24 reviews</p>
-            </CardContent>
-          </Card>
-        </div>
+           <Card>
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardTitle className="text-sm font-medium">Average Rating</CardTitle>
+               <Star className="h-4 w-4 text-muted-foreground" />
+             </CardHeader>
+             <CardContent>
+               <div className="text-2xl font-bold">{businessStats.averageRating}</div>
+               <p className="text-xs text-muted-foreground">
+                 Based on {reviews.length} reviews
+               </p>
+             </CardContent>
+           </Card>
+         </div>
 
-                 {/* Main Content Tabs */}
+         {/* Main Content Tabs */}
          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
            <TabsList className="grid w-full grid-cols-9">
              <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -142,32 +283,40 @@ export default function BusinessDashboard() {
                   <CardTitle>Recent Bookings</CardTitle>
                   <CardDescription>Latest customer appointments</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-medium">John Doe</p>
-                        <p className="text-sm text-muted-foreground">Today at 2:00 PM</p>
-                        <p className="text-sm text-muted-foreground">Hair Styling</p>
-                      </div>
-                      <div className="text-right">
-                        <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
-                        <p className="text-sm font-medium mt-1">R500</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-medium">Jane Smith</p>
-                        <p className="text-sm text-muted-foreground">Tomorrow at 10:00 AM</p>
-                        <p className="text-sm text-muted-foreground">Nail Art</p>
-                      </div>
-                      <div className="text-right">
-                        <Badge className="bg-blue-100 text-blue-800">Confirmed</Badge>
-                        <p className="text-sm font-medium mt-1">R300</p>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
+                                 <CardContent>
+                   <div className="space-y-4">
+                     {bookings.slice(0, 3).map((booking, index) => (
+                       <div key={booking.id || index} className="flex items-center justify-between p-3 border rounded-lg">
+                         <div className="flex-1">
+                           <p className="font-medium">{booking.users?.name || 'Unknown Customer'}</p>
+                           <p className="text-sm text-muted-foreground">
+                             {new Date(booking.booking_date).toLocaleDateString()} at {booking.booking_time}
+                           </p>
+                           <p className="text-sm text-muted-foreground">
+                             {booking.services?.name || 'Unknown Service'}
+                           </p>
+                         </div>
+                         <div className="text-right">
+                           <Badge className={`${
+                             booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                             booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                             'bg-gray-100 text-gray-800'
+                           }`}>
+                             {booking.status || 'Unknown'}
+                           </Badge>
+                           <p className="text-sm font-medium mt-1">
+                             R{booking.services?.price || 0}
+                           </p>
+                         </div>
+                       </div>
+                     ))}
+                     {bookings.length === 0 && (
+                       <div className="text-center py-4 text-muted-foreground">
+                         No bookings yet
+                       </div>
+                     )}
+                   </div>
+                 </CardContent>
               </Card>
 
               {/* Quick Actions */}
@@ -227,35 +376,48 @@ export default function BusinessDashboard() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-4">
-                        <div>
-                          <p className="font-medium">John Doe</p>
-                          <p className="text-sm text-muted-foreground">john@example.com</p>
-                          <p className="text-sm text-muted-foreground">+27123456789</p>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          <p>Today</p>
-                          <p>2:00 PM</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
-                      <p className="font-medium">R500</p>
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
+                             <CardContent>
+                 <div className="space-y-4">
+                   {bookings.map((booking, index) => (
+                     <div key={booking.id || index} className="flex items-center justify-between p-4 border rounded-lg">
+                       <div className="flex-1">
+                         <div className="flex items-center space-x-4">
+                           <div>
+                             <p className="font-medium">{booking.users?.name || 'Unknown Customer'}</p>
+                             <p className="text-sm text-muted-foreground">{booking.users?.email || 'No email'}</p>
+                             <p className="text-sm text-muted-foreground">{booking.users?.phone || 'No phone'}</p>
+                           </div>
+                           <div className="text-sm text-muted-foreground">
+                             <p>{new Date(booking.booking_date).toLocaleDateString()}</p>
+                             <p>{booking.booking_time}</p>
+                           </div>
+                         </div>
+                       </div>
+                       <div className="flex items-center space-x-2">
+                         <Badge className={`${
+                           booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                           booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                           'bg-gray-100 text-gray-800'
+                         }`}>
+                           {booking.status || 'Unknown'}
+                         </Badge>
+                         <p className="font-medium">R{booking.services?.price || 0}</p>
+                         <Button variant="outline" size="sm">
+                           <Eye className="h-4 w-4" />
+                         </Button>
+                         <Button variant="outline" size="sm">
+                           <Edit className="h-4 w-4" />
+                         </Button>
+                       </div>
+                     </div>
+                   ))}
+                   {bookings.length === 0 && (
+                     <div className="text-center py-8 text-muted-foreground">
+                       No bookings found
+                     </div>
+                   )}
+                 </div>
+               </CardContent>
             </Card>
           </TabsContent>
 
@@ -274,55 +436,67 @@ export default function BusinessDashboard() {
                    </Button>
                  </div>
                </CardHeader>
-               <CardContent>
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                   <Card>
-                     <CardHeader>
-                       <div className="flex justify-between items-start">
-                         <div>
-                           <CardTitle className="text-lg">Hair Styling</CardTitle>
-                           <CardDescription>Professional hair styling services</CardDescription>
-                         </div>
-                         <Badge variant="default">Active</Badge>
+                                <CardContent>
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                     {services.map((service, index) => (
+                       <Card key={service.id || index}>
+                         <CardHeader>
+                           <div className="flex justify-between items-start">
+                             <div>
+                               <CardTitle className="text-lg">{service.name || 'Unnamed Service'}</CardTitle>
+                               <CardDescription>{service.description || 'No description available'}</CardDescription>
+                             </div>
+                             <Badge variant="default">{service.status || 'Active'}</Badge>
+                           </div>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="space-y-2">
+                             <div className="flex justify-between text-sm">
+                               <span>Price:</span>
+                               <span className="font-medium">R{service.price || 0}</span>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Duration:</span>
+                               <span className="font-medium">{service.duration || 0} min</span>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Category:</span>
+                               <span className="font-medium">{service.category_id || 'Uncategorized'}</span>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Bookings:</span>
+                               <span className="font-medium">
+                                 {bookings.filter(b => b.service_id === service.id).length}
+                               </span>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Revenue:</span>
+                               <span className="font-medium">
+                                 R{bookings.filter(b => b.service_id === service.id)
+                                   .reduce((sum, b) => sum + (b.services?.price || 0), 0)}
+                               </span>
+                             </div>
+                           </div>
+                           <div className="flex space-x-2 mt-4">
+                             <Button variant="outline" size="sm" className="flex-1">
+                               <Edit className="h-4 w-4 mr-2" />
+                               Edit
+                             </Button>
+                             <Button variant="outline" size="sm" className="flex-1">
+                               <Eye className="h-4 w-4 mr-2" />
+                               View
+                             </Button>
+                           </div>
+                         </CardContent>
+                       </Card>
+                     ))}
+                     {services.length === 0 && (
+                       <div className="col-span-full text-center py-8 text-muted-foreground">
+                         No services found. Create your first service to get started.
                        </div>
-                     </CardHeader>
-                     <CardContent>
-                       <div className="space-y-2">
-                         <div className="flex justify-between text-sm">
-                           <span>Price:</span>
-                           <span className="font-medium">R500</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Duration:</span>
-                           <span className="font-medium">60 min</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Assigned Staff:</span>
-                           <span className="font-medium">Sarah, Mike</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Bookings:</span>
-                           <span className="font-medium">12</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Revenue:</span>
-                           <span className="font-medium">R6,000</span>
-                         </div>
-                       </div>
-                       <div className="flex space-x-2 mt-4">
-                         <Button variant="outline" size="sm" className="flex-1">
-                           <Edit className="h-4 w-4 mr-2" />
-                           Edit
-                         </Button>
-                         <Button variant="outline" size="sm" className="flex-1">
-                           <Eye className="h-4 w-4 mr-2" />
-                           View
-                         </Button>
-                       </div>
-                     </CardContent>
-                   </Card>
-                 </div>
-               </CardContent>
+                     )}
+                   </div>
+                 </CardContent>
              </Card>
            </TabsContent>
 
@@ -342,172 +516,94 @@ export default function BusinessDashboard() {
                  </div>
                </CardHeader>
                <CardContent>
-                 <div className="space-y-4">
-                   {/* Staff List */}
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div className="space-y-4">
+                     {/* Staff List */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                       {staff.map((member, index) => (
+                         <Card key={member.id || index}>
+                           <CardHeader className="pb-3">
+                             <div className="flex items-center space-x-3">
+                               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                                 <Users className="h-6 w-6 text-primary" />
+                               </div>
+                               <div>
+                                 <CardTitle className="text-lg">{member.name || 'Unnamed Staff'}</CardTitle>
+                                 <CardDescription>{member.role || 'Staff Member'}</CardDescription>
+                               </div>
+                             </div>
+                           </CardHeader>
+                           <CardContent className="space-y-3">
+                             <div className="flex justify-between text-sm">
+                               <span>Status:</span>
+                               <Badge className="bg-green-100 text-green-800">Active</Badge>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Email:</span>
+                               <span className="font-medium">{member.email || 'No email'}</span>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Phone:</span>
+                               <span className="font-medium">{member.phone || 'No phone'}</span>
+                             </div>
+                             <div className="flex justify-between text-sm">
+                               <span>Joined:</span>
+                               <span className="font-medium">
+                                 {new Date(member.created_at).toLocaleDateString()}
+                               </span>
+                             </div>
+                             <div className="flex space-x-2 mt-3">
+                               <Button variant="outline" size="sm" className="flex-1">
+                                 <Edit className="h-4 w-4 mr-2" />
+                                 Edit
+                               </Button>
+                               <Button variant="outline" size="sm" className="flex-1">
+                                 <Calendar className="h-4 w-4 mr-2" />
+                                 Schedule
+                               </Button>
+                             </div>
+                           </CardContent>
+                         </Card>
+                       ))}
+                       {staff.length === 0 && (
+                         <div className="col-span-full text-center py-8 text-muted-foreground">
+                           No staff members found. Add staff members to get started.
+                         </div>
+                       )}
+                     </div>
+
+                                        {/* Staff Statistics */}
                      <Card>
-                       <CardHeader className="pb-3">
-                         <div className="flex items-center space-x-3">
-                           <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                             <Users className="h-6 w-6 text-primary" />
-                           </div>
-                           <div>
-                             <CardTitle className="text-lg">Sarah Johnson</CardTitle>
-                             <CardDescription>Senior Hair Stylist</CardDescription>
-                           </div>
-                         </div>
+                       <CardHeader>
+                         <CardTitle>Staff Overview</CardTitle>
+                         <CardDescription>Quick statistics about your team</CardDescription>
                        </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="flex justify-between text-sm">
-                           <span>Status:</span>
-                           <Badge className="bg-green-100 text-green-800">Active</Badge>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Services:</span>
-                           <span className="font-medium">Hair Styling, Coloring</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Hours:</span>
-                           <span className="font-medium">Mon-Fri, 9AM-6PM</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Rating:</span>
-                           <div className="flex items-center">
-                             <Star className="h-4 w-4 text-yellow-400 fill-current mr-1" />
-                             <span className="font-medium">4.9</span>
+                       <CardContent>
+                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                           <div className="text-center">
+                             <div className="text-2xl font-bold text-primary">{staff.length}</div>
+                             <div className="text-sm text-muted-foreground">Total Staff</div>
                            </div>
-                         </div>
-                         <div className="flex space-x-2 mt-3">
-                           <Button variant="outline" size="sm" className="flex-1">
-                             <Edit className="h-4 w-4 mr-2" />
-                             Edit
-                           </Button>
-                           <Button variant="outline" size="sm" className="flex-1">
-                             <Calendar className="h-4 w-4 mr-2" />
-                             Schedule
-                           </Button>
+                           <div className="text-center">
+                             <div className="text-2xl font-bold text-green-600">
+                               {staff.filter(s => s.role === 'business').length}
+                             </div>
+                             <div className="text-sm text-muted-foreground">Business Staff</div>
+                           </div>
+                           <div className="text-center">
+                             <div className="text-2xl font-bold text-yellow-600">
+                               {staff.filter(s => s.role === 'staff').length}
+                             </div>
+                             <div className="text-sm text-muted-foreground">Service Staff</div>
+                           </div>
+                           <div className="text-center">
+                             <div className="text-2xl font-bold text-blue-600">
+                               {staff.length > 0 ? 'Active' : 'None'}
+                             </div>
+                             <div className="text-sm text-muted-foreground">Status</div>
+                           </div>
                          </div>
                        </CardContent>
                      </Card>
-
-                     <Card>
-                       <CardHeader className="pb-3">
-                         <div className="flex items-center space-x-3">
-                           <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                             <Users className="h-6 w-6 text-primary" />
-                           </div>
-                           <div>
-                             <CardTitle className="text-lg">Mike Chen</CardTitle>
-                             <CardDescription>Nail Technician</CardDescription>
-                           </div>
-                         </div>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="flex justify-between text-sm">
-                           <span>Status:</span>
-                           <Badge className="bg-green-100 text-green-800">Active</Badge>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Services:</span>
-                           <span className="font-medium">Nail Art, Manicure</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Hours:</span>
-                           <span className="font-medium">Mon-Sat, 10AM-7PM</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Rating:</span>
-                           <div className="flex items-center">
-                             <Star className="h-4 w-4 text-yellow-400 fill-current mr-1" />
-                             <span className="font-medium">4.7</span>
-                           </div>
-                         </div>
-                         <div className="flex space-x-2 mt-3">
-                           <Button variant="outline" size="sm" className="flex-1">
-                             <Edit className="h-4 w-4 mr-2" />
-                             Edit
-                           </Button>
-                           <Button variant="outline" size="sm" className="flex-1">
-                             <Calendar className="h-4 w-4 mr-2" />
-                             Schedule
-                           </Button>
-                         </div>
-                       </CardContent>
-                     </Card>
-
-                     <Card>
-                       <CardHeader className="pb-3">
-                         <div className="flex items-center space-x-3">
-                           <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                             <Users className="h-6 w-6 text-primary" />
-                           </div>
-                           <div>
-                             <CardTitle className="text-lg">Lisa Rodriguez</CardTitle>
-                             <CardDescription>Receptionist</CardDescription>
-                           </div>
-                         </div>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="flex justify-between text-sm">
-                           <span>Status:</span>
-                           <Badge className="bg-yellow-100 text-yellow-800">Part-time</Badge>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Services:</span>
-                           <span className="font-medium">Customer Service</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Hours:</span>
-                           <span className="font-medium">Mon-Fri, 2PM-6PM</span>
-                         </div>
-                         <div className="flex justify-between text-sm">
-                           <span>Rating:</span>
-                           <div className="flex items-center">
-                             <Star className="h-4 w-4 text-yellow-400 fill-current mr-1" />
-                             <span className="font-medium">4.8</span>
-                           </div>
-                         </div>
-                         <div className="flex space-x-2 mt-3">
-                           <Button variant="outline" size="sm" className="flex-1">
-                             <Edit className="h-4 w-4 mr-2" />
-                             Edit
-                           </Button>
-                           <Button variant="outline" size="sm" className="flex-1">
-                             <Calendar className="h-4 w-4 mr-2" />
-                             Schedule
-                           </Button>
-                         </div>
-                       </CardContent>
-                     </Card>
-                   </div>
-
-                   {/* Staff Statistics */}
-                   <Card>
-                     <CardHeader>
-                       <CardTitle>Staff Overview</CardTitle>
-                       <CardDescription>Quick statistics about your team</CardDescription>
-                     </CardHeader>
-                     <CardContent>
-                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                         <div className="text-center">
-                           <div className="text-2xl font-bold text-primary">3</div>
-                           <div className="text-sm text-muted-foreground">Total Staff</div>
-                         </div>
-                         <div className="text-center">
-                           <div className="text-2xl font-bold text-green-600">2</div>
-                           <div className="text-sm text-muted-foreground">Full-time</div>
-                         </div>
-                         <div className="text-center">
-                           <div className="text-2xl font-bold text-yellow-600">1</div>
-                           <div className="text-sm text-muted-foreground">Part-time</div>
-                         </div>
-                         <div className="text-center">
-                           <div className="text-2xl font-bold text-blue-600">4.8</div>
-                           <div className="text-sm text-muted-foreground">Avg Rating</div>
-                         </div>
-                       </div>
-                     </CardContent>
-                   </Card>
                  </div>
                </CardContent>
              </Card>
@@ -765,143 +861,115 @@ export default function BusinessDashboard() {
                </CardHeader>
                <CardContent>
                  <div className="space-y-6">
-                   {/* Support Statistics */}
-                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-orange-600">8</div>
-                         <p className="text-xs text-muted-foreground">Requires attention</p>
-                       </CardContent>
-                     </Card>
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-blue-600">5</div>
-                         <p className="text-xs text-muted-foreground">Being handled</p>
-                       </CardContent>
-                     </Card>
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">Resolved</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-green-600">23</div>
-                         <p className="text-xs text-muted-foreground">This month</p>
-                       </CardContent>
-                     </Card>
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">Avg Response</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-purple-600">2.4h</div>
-                         <p className="text-xs text-muted-foreground">Response time</p>
-                       </CardContent>
-                     </Card>
-                   </div>
+                                        {/* Support Statistics */}
+                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-orange-600">
+                             {supportTickets.filter(t => t.status === 'open').length}
+                           </div>
+                           <p className="text-xs text-muted-foreground">Requires attention</p>
+                         </CardContent>
+                       </Card>
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-blue-600">
+                             {supportTickets.filter(t => t.status === 'in_progress').length}
+                           </div>
+                           <p className="text-xs text-muted-foreground">Being handled</p>
+                         </CardContent>
+                       </Card>
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">Resolved</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-green-600">
+                             {supportTickets.filter(t => t.status === 'resolved').length}
+                           </div>
+                           <p className="text-xs text-muted-foreground">This month</p>
+                         </CardContent>
+                       </Card>
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-purple-600">{supportTickets.length}</div>
+                           <p className="text-xs text-muted-foreground">All time</p>
+                         </CardContent>
+                       </Card>
+                     </div>
 
-                   {/* Active Tickets */}
-                   <Card>
-                     <CardHeader>
-                       <CardTitle>Active Support Tickets</CardTitle>
-                       <CardDescription>Recent customer support requests</CardDescription>
-                     </CardHeader>
-                     <CardContent>
-                       <div className="space-y-4">
-                         <div className="flex items-center justify-between p-4 border rounded-lg">
-                           <div className="flex-1">
-                             <div className="flex items-center space-x-3">
-                               <Badge className="bg-red-100 text-red-800">High Priority</Badge>
-                               <Badge className="bg-orange-100 text-orange-800">Open</Badge>
+                                        {/* Active Tickets */}
+                     <Card>
+                       <CardHeader>
+                         <CardTitle>Active Support Tickets</CardTitle>
+                         <CardDescription>Recent customer support requests</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <div className="space-y-4">
+                           {supportTickets.slice(0, 5).map((ticket, index) => (
+                             <div key={ticket.id || index} className="flex items-center justify-between p-4 border rounded-lg">
+                               <div className="flex-1">
+                                 <div className="flex items-center space-x-3">
+                                   <Badge className={`${
+                                     ticket.priority === 'high' ? 'bg-red-100 text-red-800' :
+                                     ticket.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                     'bg-blue-100 text-blue-800'
+                                   }`}>
+                                     {ticket.priority || 'Low'} Priority
+                                   </Badge>
+                                   <Badge className={`${
+                                     ticket.status === 'open' ? 'bg-orange-100 text-orange-800' :
+                                     ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                     'bg-green-100 text-green-800'
+                                   }`}>
+                                     {ticket.status || 'Open'}
+                                   </Badge>
+                                 </div>
+                                 <h4 className="font-medium mt-2">{ticket.subject || 'No Subject'}</h4>
+                                 <p className="text-sm text-muted-foreground">
+                                   Customer: {ticket.customer_name || 'Unknown'}
+                                 </p>
+                                 <p className="text-sm text-muted-foreground mt-1">
+                                   {ticket.description || 'No description available'}
+                                 </p>
+                               </div>
+                               <div className="text-right">
+                                 <p className="text-sm text-muted-foreground">
+                                   {new Date(ticket.created_at).toLocaleDateString()}
+                                 </p>
+                                 <p className="text-sm text-muted-foreground">
+                                   {new Date(ticket.created_at).toLocaleTimeString()}
+                                 </p>
+                                 <div className="flex space-x-2 mt-2">
+                                   <Button variant="outline" size="sm">
+                                     <Eye className="h-4 w-4 mr-2" />
+                                     View
+                                   </Button>
+                                   <Button variant="outline" size="sm">
+                                     <MessageSquare className="h-4 w-4 mr-2" />
+                                     Reply
+                                   </Button>
+                                 </div>
+                               </div>
                              </div>
-                             <h4 className="font-medium mt-2">Service Quality Complaint</h4>
-                             <p className="text-sm text-muted-foreground">Customer: John Smith</p>
-                             <p className="text-sm text-muted-foreground">Service: Hair Styling on Dec 10</p>
-                             <p className="text-sm text-muted-foreground mt-1">
-                               "The service was not up to the expected standard. Hair color is different from what was discussed."
-                             </p>
-                           </div>
-                           <div className="text-right">
-                             <p className="text-sm text-muted-foreground">Dec 12, 2024</p>
-                             <p className="text-sm text-muted-foreground">2 hours ago</p>
-                             <div className="flex space-x-2 mt-2">
-                               <Button variant="outline" size="sm">
-                                 <Eye className="h-4 w-4 mr-2" />
-                                 View
-                               </Button>
-                               <Button variant="outline" size="sm">
-                                 <MessageSquare className="h-4 w-4 mr-2" />
-                                 Reply
-                               </Button>
+                           ))}
+                           {supportTickets.length === 0 && (
+                             <div className="text-center py-8 text-muted-foreground">
+                               No support tickets found
                              </div>
-                           </div>
+                           )}
                          </div>
-
-                         <div className="flex items-center justify-between p-4 border rounded-lg">
-                           <div className="flex-1">
-                             <div className="flex items-center space-x-3">
-                               <Badge className="bg-yellow-100 text-yellow-800">Medium Priority</Badge>
-                               <Badge className="bg-blue-100 text-blue-800">In Progress</Badge>
-                             </div>
-                             <h4 className="font-medium mt-2">Booking Cancellation Request</h4>
-                             <p className="text-sm text-muted-foreground">Customer: Sarah Johnson</p>
-                             <p className="text-sm text-muted-foreground">Service: Nail Art on Dec 15</p>
-                             <p className="text-sm text-muted-foreground mt-1">
-                               "Need to cancel my appointment due to an emergency. Can I reschedule?"
-                             </p>
-                           </div>
-                           <div className="text-right">
-                             <p className="text-sm text-muted-foreground">Dec 11, 2024</p>
-                             <p className="text-sm text-muted-foreground">1 day ago</p>
-                             <div className="flex space-x-2 mt-2">
-                               <Button variant="outline" size="sm">
-                                 <Eye className="h-4 w-4 mr-2" />
-                                 View
-                               </Button>
-                               <Button variant="outline" size="sm">
-                                 <MessageSquare className="h-4 w-4 mr-2" />
-                                 Reply
-                               </Button>
-                             </div>
-                           </div>
-                         </div>
-
-                         <div className="flex items-center justify-between p-4 border rounded-lg">
-                           <div className="flex-1">
-                             <div className="flex items-center space-x-3">
-                               <Badge className="bg-blue-100 text-blue-800">Low Priority</Badge>
-                               <Badge className="bg-orange-100 text-orange-800">Open</Badge>
-                             </div>
-                             <h4 className="font-medium mt-2">General Inquiry</h4>
-                             <p className="text-sm text-muted-foreground">Customer: Mike Davis</p>
-                             <p className="text-sm text-muted-foreground">Service: Information Request</p>
-                             <p className="text-sm text-muted-foreground mt-1">
-                               "What are your operating hours during the holiday season?"
-                             </p>
-                           </div>
-                           <div className="text-right">
-                             <p className="text-sm text-muted-foreground">Dec 11, 2024</p>
-                             <p className="text-sm text-muted-foreground">1 day ago</p>
-                             <div className="flex space-x-2 mt-2">
-                               <Button variant="outline" size="sm">
-                                 <Eye className="h-4 w-4 mr-2" />
-                                 View
-                               </Button>
-                               <Button variant="outline" size="sm">
-                                 <MessageSquare className="h-4 w-4 mr-2" />
-                                 Reply
-                               </Button>
-                             </div>
-                           </div>
-                         </div>
-                       </div>
-                     </CardContent>
-                   </Card>
+                       </CardContent>
+                     </Card>
 
                    {/* Quick Actions */}
                    <Card>
@@ -956,139 +1024,123 @@ export default function BusinessDashboard() {
                </CardHeader>
                <CardContent>
                  <div className="space-y-6">
-                   {/* Review Statistics */}
-                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">Overall Rating</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="flex items-center space-x-2">
-                           <div className="text-2xl font-bold">4.8</div>
-                           <div className="flex items-center">
-                             <Star className="h-5 w-5 text-yellow-400 fill-current" />
-                           </div>
-                         </div>
-                         <p className="text-xs text-muted-foreground">Based on 156 reviews</p>
-                       </divContent>
-                     </Card>
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">This Month</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-green-600">24</div>
-                         <p className="text-xs text-muted-foreground">New reviews</p>
-                       </divContent>
-                     </Card>
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-blue-600">89%</div>
-                         <p className="text-xs text-muted-foreground">Reviews responded to</p>
-                       </divContent>
-                     </Card>
-                     <Card>
-                       <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium">Feedback Requests</CardTitle>
-                       </CardHeader>
-                       <CardContent>
-                         <div className="text-2xl font-bold text-purple-600">67</div>
-                         <p className="text-xs text-muted-foreground">Sent this month</p>
-                       </divContent>
-                     </Card>
-                   </div>
-
-                   {/* Recent Reviews */}
-                   <Card>
-                     <CardHeader>
-                       <CardTitle>Recent Customer Reviews</CardTitle>
-                       <CardDescription>Latest customer feedback and ratings</CardDescription>
-                     </CardHeader>
-                     <CardContent>
-                       <div className="space-y-4">
-                         <div className="flex items-start space-x-4 p-4 border rounded-lg">
-                           <div className="flex-shrink-0">
-                             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                               <Users className="h-6 w-6 text-primary" />
+                                        {/* Review Statistics */}
+                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">Overall Rating</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="flex items-center space-x-2">
+                             <div className="text-2xl font-bold">{businessStats.averageRating}</div>
+                             <div className="flex items-center">
+                               <Star className="h-5 w-5 text-yellow-400 fill-current" />
                              </div>
                            </div>
-                           <div className="flex-1">
-                             <div className="flex items-center justify-between">
-                               <h4 className="font-medium">Excellent Service!</h4>
-                               <div className="flex items-center space-x-1">
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
+                           <p className="text-xs text-muted-foreground">Based on {reviews.length} reviews</p>
+                         </CardContent>
+                       </Card>
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">This Month</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-green-600">
+                             {reviews.filter(r => new Date(r.created_at).getMonth() === new Date().getMonth()).length}
+                           </div>
+                           <p className="text-xs text-muted-foreground">New reviews</p>
+                         </CardContent>
+                       </Card>
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">Total Reviews</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-blue-600">{reviews.length}</div>
+                           <p className="text-xs text-muted-foreground">All time</p>
+                         </CardContent>
+                       </Card>
+                       <Card>
+                         <CardHeader className="pb-2">
+                           <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+                         </CardHeader>
+                         <CardContent>
+                           <div className="text-2xl font-bold text-purple-600">
+                             {reviews.filter(r => {
+                               const reviewDate = new Date(r.created_at)
+                               const now = new Date()
+                               const diffTime = Math.abs(now.getTime() - reviewDate.getTime())
+                               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                               return diffDays <= 7
+                             }).length}
+                           </div>
+                           <p className="text-xs text-muted-foreground">Last 7 days</p>
+                         </CardContent>
+                       </Card>
+                     </div>
+
+                                        {/* Recent Reviews */}
+                     <Card>
+                       <CardHeader>
+                         <CardTitle>Recent Customer Reviews</CardTitle>
+                         <CardDescription>Latest customer feedback and ratings</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <div className="space-y-4">
+                           {reviews.slice(0, 5).map((review, index) => (
+                             <div key={review.id || index} className="flex items-start space-x-4 p-4 border rounded-lg">
+                               <div className="flex-shrink-0">
+                                 <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                                   <Users className="h-6 w-6 text-primary" />
+                                 </div>
+                               </div>
+                               <div className="flex-1">
+                                 <div className="flex items-center justify-between">
+                                   <h4 className="font-medium">{review.title || 'No Title'}</h4>
+                                   <div className="flex items-center space-x-1">
+                                     {[...Array(5)].map((_, i) => (
+                                       <Star 
+                                         key={i} 
+                                         className={`h-4 w-4 ${
+                                           i < (review.rating || 0) 
+                                             ? 'text-yellow-400 fill-current' 
+                                             : 'text-gray-300'
+                                         }`} 
+                                       />
+                                     ))}
+                                   </div>
+                                 </div>
+                                 <p className="text-sm text-muted-foreground">
+                                   {review.customer_name || 'Anonymous'} - {review.service_name || 'Service'}
+                                 </p>
+                                 <p className="text-sm mt-2">
+                                   {review.comment || 'No comment provided'}
+                                 </p>
+                                 <div className="flex items-center space-x-2 mt-3">
+                                   <Button variant="outline" size="sm">
+                                     <MessageSquare className="h-4 w-4 mr-2" />
+                                     Reply
+                                   </Button>
+                                   <Button variant="outline" size="sm">
+                                     <CheckCircle className="h-4 w-4 mr-2" />
+                                     Mark as Responded
+                                   </Button>
+                                 </div>
+                               </div>
+                               <div className="text-right text-sm text-muted-foreground">
+                                 <p>{new Date(review.created_at).toLocaleDateString()}</p>
+                                 <p>{new Date(review.created_at).toLocaleTimeString()}</p>
                                </div>
                              </div>
-                             <p className="text-sm text-muted-foreground">Sarah Johnson - Hair Styling</p>
-                             <p className="text-sm mt-2">
-                               "Amazing experience! The stylist was professional and the result exceeded my expectations. 
-                               Will definitely come back and recommend to friends."
-                             </p>
-                             <div className="flex items-center space-x-2 mt-3">
-                               <Button variant="outline" size="sm">
-                                 <MessageSquare className="h-4 w-4 mr-2" />
-                                 Reply
-                               </Button>
-                               <Button variant="outline" size="sm">
-                                 <CheckCircle className="h-4 w-4 mr-2" />
-                                 Mark as Responded
-                               </Button>
+                           ))}
+                           {reviews.length === 0 && (
+                             <div className="text-center py-8 text-muted-foreground">
+                               No reviews found yet
                              </div>
-                           </div>
-                           <div className="text-right text-sm text-muted-foreground">
-                             <p>Dec 12, 2024</p>
-                             <p>2 hours ago</p>
-                           </div>
+                           )}
                          </div>
-
-                         <div className="flex items-start space-x-4 p-4 border rounded-lg">
-                           <div className="flex-shrink-0">
-                             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                               <Users className="h-6 w-6 text-primary" />
-                             </div>
-                           </div>
-                           <div className="flex-1">
-                             <div className="flex items-center justify-between">
-                               <h4 className="font-medium">Good but could be better</h4>
-                               <div className="flex items-center space-x-1">
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                                 <Star className="h-4 w-4 text-gray-300" />
-                               </div>
-                             </div>
-                             <p className="text-sm text-muted-foreground">Mike Chen - Nail Art</p>
-                             <p className="text-sm mt-2">
-                               "The service was good overall, but the waiting time was longer than expected. 
-                               The nail art design was beautiful though."
-                             </p>
-                             <div className="flex items-center space-x-2 mt-3">
-                               <Button variant="outline" size="sm">
-                                 <MessageSquare className="h-4 w-4 mr-2" />
-                                 Reply
-                               </Button>
-                               <Button variant="outline" size="sm">
-                                 <CheckCircle className="h-4 w-4 mr-2" />
-                                 Mark as Responded
-                               </Button>
-                             </div>
-                           </div>
-                           <div className="text-right text-sm text-muted-foreground">
-                             <p>Dec 11, 2024</p>
-                             <p>1 day ago</p>
-                           </div>
-                         </div>
-                       </div>
-                     </CardContent>
-                   </Card>
+                       </CardContent>
+                     </Card>
 
                    {/* Automated Feedback Collection */}
                    <Card>
