@@ -326,9 +326,7 @@ export default function BookingPage() {
                         <Label htmlFor="service">Select a Service</Label>
                         <Select onValueChange={(value) => {
                           const selectedService = availableServices.find(s => s.id === value)
-                          if (selectedService) {
-                            setService(selectedService)
-                          }
+                          setService(selectedService || null)
                         }}>
                           <SelectTrigger>
                             <SelectValue placeholder="Choose a service to book" />
@@ -346,15 +344,15 @@ export default function BookingPage() {
                         </Select>
                         {service && (
                           <div className="mt-3 p-3 bg-background border rounded">
-                            <p className="text-sm text-muted-foreground">{service.description}</p>
+                            <p className="text-sm text-muted-foreground">{service?.description || 'No description available'}</p>
                             <div className="flex items-center space-x-4 text-sm mt-2">
                               <span className="flex items-center">
                                 <Clock className="h-4 w-4 mr-1" />
-                                {service.duration} minutes
+                                {service?.duration || 0} minutes
                               </span>
                               <span className="flex items-center font-semibold">
                                 <DollarSign className="h-4 w-4 mr-1" />
-                                R{service.price}
+                                R{service?.price || 0}
                               </span>
                             </div>
                           </div>
