@@ -162,7 +162,7 @@ export default function BusinessDashboard() {
         totalBookings,
         totalRevenue,
         totalCustomers,
-        averageRating: parseFloat(averageRating)
+        averageRating: typeof averageRating === 'string' ? parseFloat(averageRating) : averageRating
       })
       
       setLoading(false)
