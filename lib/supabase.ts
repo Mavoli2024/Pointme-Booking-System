@@ -12,7 +12,7 @@ const getSSRModule = async (): Promise<SSRModule> => {
     try {
       // Dynamic import with error handling
       const module = await import("@supabase/ssr")
-      ssrModule = module as SSRModule
+      ssrModule = module as unknown as SSRModule
     } catch (error) {
       console.warn("⚠️ @supabase/ssr not available, using fallback client creation")
       ssrModule = {
@@ -117,7 +117,7 @@ export const createServerSupabaseClient = async (cookieStore: CookieStore) => {
             return cookieStore.get(name)?.value
           },
         },
-      })
+      } as any)
     } else {
       return createSupabaseClient(supabaseUrl, supabaseKey)
     }

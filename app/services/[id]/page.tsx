@@ -69,7 +69,7 @@ const reviews = [
 export default function ServiceDetailPage() {
   const params = useParams()
   const serviceId = params.id as string
-  const service = serviceData[serviceId as keyof typeof serviceData]
+  const service = serviceData[serviceId as unknown as keyof typeof serviceData]
 
   if (!service) {
     return (

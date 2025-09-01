@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation"
 
 export function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 

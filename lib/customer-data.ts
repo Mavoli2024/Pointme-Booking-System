@@ -146,8 +146,8 @@ export async function getCustomerBookings(customerEmail: string): Promise<Custom
         booking_date: booking.booking_date,
         booking_time: booking.booking_time,
         status: booking.status,
-        service_name: booking.service?.name || 'Unknown Service',
-        business_name: booking.business?.name || 'Unknown Business',
+        service_name: (booking.service as any)?.name || 'Unknown Service',
+        business_name: (booking.business as any)?.name || 'Unknown Business',
         total_amount: booking.total_amount,
         payment_status: booking.payment_status,
         payment_method: payment?.payment_method || 'unknown',
@@ -156,17 +156,17 @@ export async function getCustomerBookings(customerEmail: string): Promise<Custom
         notes: booking.notes,
         created_at: booking.created_at,
         service: {
-          name: booking.service?.name || 'Unknown Service',
-          price: booking.service?.price || 0,
-          description: booking.service?.description,
-          duration: booking.service?.duration
+          name: (booking.service as any)?.name || 'Unknown Service',
+          price: (booking.service as any)?.price || 0,
+          description: (booking.service as any)?.description,
+          duration: (booking.service as any)?.duration
         },
         business: {
-          name: booking.business?.name || 'Unknown Business',
-          email: booking.business?.email || '',
-          phone: booking.business?.phone || '',
-          address: booking.business?.address || '',
-          rating: booking.business?.rating || 0
+          name: (booking.business as any)?.name || 'Unknown Business',
+          email: (booking.business as any)?.email || '',
+          phone: (booking.business as any)?.phone || '',
+          address: (booking.business as any)?.address || '',
+          rating: (booking.business as any)?.rating || 0
         },
         review: review ? {
           rating: review.rating,
@@ -214,8 +214,8 @@ export async function getCustomerPayments(customerEmail: string): Promise<Custom
       payment_method: payment.payment_method,
       created_at: payment.created_at,
       booking: {
-        service_name: payment.booking?.service?.name || 'Unknown Service',
-        business_name: payment.booking?.business?.name || 'Unknown Business'
+        service_name: (payment.booking as any)?.service?.name || 'Unknown Service',
+        business_name: (payment.booking as any)?.business?.name || 'Unknown Business'
       }
     })) || []
   } catch (error) {
@@ -309,7 +309,7 @@ export async function getCustomerProfile(customerEmail: string): Promise<Custome
 
     const serviceCounts: { [key: string]: number } = {}
     serviceBookings?.forEach(booking => {
-      const categoryName = booking.service?.category?.name || 'General'
+      const categoryName = (booking.service as any)?.category?.name || 'General'
       serviceCounts[categoryName] = (serviceCounts[categoryName] || 0) + 1
     })
 
@@ -382,7 +382,7 @@ export async function getCustomerStats(customerEmail: string): Promise<CustomerS
     // Calculate favorite category
     const categoryCounts: { [key: string]: number } = {}
     bookings?.forEach(booking => {
-      const categoryName = booking.service?.category?.name || 'General'
+      const categoryName = (booking.service as any)?.category?.name || 'General'
       categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1
     })
 

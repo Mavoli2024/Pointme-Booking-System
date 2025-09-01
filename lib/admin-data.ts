@@ -501,8 +501,8 @@ export async function getFinancialData(): Promise<FinancialData[]> {
     const financialMap = new Map<string, FinancialData>()
     
     bookings?.forEach(booking => {
-      const businessId = booking.businesses?.id || 'unknown'
-      const businessName = booking.businesses?.name || 'Unknown'
+      const businessId = (booking.businesses as any)?.id || 'unknown'
+      const businessName = (booking.businesses as any)?.name || 'Unknown'
       const date = new Date(booking.created_at).toISOString().split('T')[0]
       const key = `${businessId}-${date}`
 
@@ -554,8 +554,8 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
       { data: businesses }
     ] = await Promise.all([
       supabase.from('users').select('created_at'),
-      supabase.from('bookings').select('created_at, total_amount, booking_time'),
-      supabase.from('businesses').select('created_at, category_id, rating')
+      supabase.from('bookings').select('created_at, total_amount, booking_time, status'),
+      supabase.from('businesses').select('created_at, category_id, rating, status')
     ])
 
     // Calculate user growth
@@ -637,7 +637,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
       businessPerformance: {
         totalBusinesses: businesses?.length || 0,
         activeBusinesses: businesses?.filter(business => business.status === 'approved').length || 0,
-        averageRating: businesses?.reduce((sum, business) => sum + (business.rating || 0), 0) / (businesses?.length || 1),
+        averageRating: businesses ? businesses.reduce((sum, business) => sum + (business.rating || 0), 0) / businesses.length : 0,
         topCategories: [] // TODO: Implement category analysis
       }
     }

@@ -127,7 +127,8 @@ import {
   FolderArchive,
   FolderDown,
   FolderUp,
-  FolderCode
+  FolderCode,
+  X
 } from "lucide-react"
 import { createClient } from "@/lib/supabase"
 
@@ -138,6 +139,19 @@ interface TableData {
   lastModified: string
   size: string
   status: 'active' | 'inactive' | 'error'
+}
+
+interface BusinessData {
+  id: string
+  name: string
+  serviceType: string
+  commissionRate: number
+  monthlyBookings: number
+  averageBookingValue: number
+  status: string
+  email: string
+  phone: string
+  address: string
 }
 
 interface DatabaseRecord {
@@ -186,7 +200,7 @@ export default function AdminDashboard() {
     { type: "Entertainment", defaultRate: 14.0 }
   ])
 
-  const [editingBusiness, setEditingBusiness] = useState<any>(null)
+  const [editingBusiness, setEditingBusiness] = useState<BusinessData | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newBusiness, setNewBusiness] = useState({
     name: '',
@@ -1639,8 +1653,8 @@ export default function AdminDashboard() {
                                 <TableCell>
                                   {isEditing ? (
                                     <Input
-                                      value={editingBusiness.name}
-                                      onChange={(e) => setEditingBusiness(prev => ({...prev, name: e.target.value}))}
+                                      value={editingBusiness?.name || ''}
+                                      onChange={(e) => setEditingBusiness(prev => prev ? {...prev, name: e.target.value} : null)}
                                     />
                                   ) : (
                                     <div className="font-medium">{business.name}</div>
@@ -1649,8 +1663,8 @@ export default function AdminDashboard() {
                                 <TableCell>
                                   {isEditing ? (
                                     <Select
-                                      value={editingBusiness.serviceType}
-                                      onValueChange={(value) => setEditingBusiness(prev => ({...prev, serviceType: value}))}
+                                      value={editingBusiness?.serviceType || ''}
+                                      onValueChange={(value) => setEditingBusiness(prev => prev ? {...prev, serviceType: value} : null)}
                                     >
                                       <SelectTrigger>
                                         <SelectValue />
@@ -1670,8 +1684,8 @@ export default function AdminDashboard() {
                                     <Input
                                       type="number"
                                       step="0.1"
-                                      value={editingBusiness.commissionRate}
-                                      onChange={(e) => setEditingBusiness(prev => ({...prev, commissionRate: parseFloat(e.target.value) || 0}))}
+                                      value={editingBusiness?.commissionRate || 0}
+                                      onChange={(e) => setEditingBusiness(prev => prev ? {...prev, commissionRate: parseFloat(e.target.value) || 0} : null)}
                                       className="w-20"
                                     />
                                   ) : (
@@ -1682,8 +1696,8 @@ export default function AdminDashboard() {
                                   {isEditing ? (
                                     <Input
                                       type="number"
-                                      value={editingBusiness.monthlyBookings}
-                                      onChange={(e) => setEditingBusiness(prev => ({...prev, monthlyBookings: parseInt(e.target.value) || 0}))}
+                                      value={editingBusiness?.monthlyBookings || 0}
+                                      onChange={(e) => setEditingBusiness(prev => prev ? {...prev, monthlyBookings: parseInt(e.target.value) || 0} : null)}
                                       className="w-20"
                                     />
                                   ) : (
@@ -1694,8 +1708,8 @@ export default function AdminDashboard() {
                                   {isEditing ? (
                                     <Input
                                       type="number"
-                                      value={editingBusiness.averageBookingValue}
-                                      onChange={(e) => setEditingBusiness(prev => ({...prev, averageBookingValue: parseFloat(e.target.value) || 0}))}
+                                      value={editingBusiness?.averageBookingValue || 0}
+                                      onChange={(e) => setEditingBusiness(prev => prev ? {...prev, averageBookingValue: parseFloat(e.target.value) || 0} : null)}
                                       className="w-20"
                                     />
                                   ) : (
