@@ -186,7 +186,7 @@ export default function AdminDashboard() {
     { type: "Entertainment", defaultRate: 14.0 }
   ])
 
-  const [editingBusiness, setEditingBusiness] = useState(null)
+  const [editingBusiness, setEditingBusiness] = useState<any>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newBusiness, setNewBusiness] = useState({
     name: '',
