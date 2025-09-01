@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Calendar, 
   Users, 
@@ -118,6 +119,8 @@ export default function CustomerDashboard() {
     paymentMethods: ["Visa ****1234", "Mastercard ****5678"]
   })
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
+  const [editingBooking, setEditingBooking] = useState<any>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
     fetchCustomerData()
@@ -238,6 +241,46 @@ export default function CustomerDashboard() {
   const getWeatherIcon = () => {
     // Mock weather - in real app, integrate with weather API
     return <Sun className="h-6 w-6 text-yellow-500" />
+  }
+
+  // Edit functions
+  const handleEdit = (booking: any) => {
+    setEditingBooking(booking)
+    setShowEditModal(true)
+  }
+
+  const handleSave = async () => {
+    try {
+      const supabase = createClient()
+      
+      if (editingBooking) {
+        const { error } = await supabase
+          .from('bookings')
+          .update({
+            status: editingBooking.status,
+            booking_date: editingBooking.booking_date,
+            booking_time: editingBooking.booking_time,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingBooking.id)
+        
+        if (error) throw error
+        console.log('✅ Booking updated successfully')
+        
+        // Refresh data
+        await fetchCustomerData()
+        setShowEditModal(false)
+        setEditingBooking(null)
+      }
+    } catch (error) {
+      console.error('❌ Error updating booking:', error)
+      alert('Failed to update booking. Please try again.')
+    }
+  }
+
+  const handleCancel = () => {
+    setShowEditModal(false)
+    setEditingBooking(null)
   }
 
   if (loading) {
@@ -509,9 +552,13 @@ export default function CustomerDashboard() {
                         <Button variant="outline" size="sm">
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                                                 <Button 
+                           variant="outline" 
+                           size="sm"
+                           onClick={() => handleEdit(booking)}
+                         >
+                           <Edit className="h-4 w-4" />
+                         </Button>
                         <Button variant="outline" size="sm">
                           <Repeat className="h-4 w-4" />
                         </Button>
@@ -705,8 +752,59 @@ export default function CustomerDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  )
-}
+                 </Tabs>
+       </div>
+
+       {/* Edit Modal */}
+       {showEditModal && editingBooking && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+           <div className="bg-white rounded-lg p-6 w-full max-w-md">
+             <h3 className="text-lg font-semibold mb-4">Edit Booking</h3>
+             
+             <div className="space-y-4">
+               <div>
+                 <Label htmlFor="status">Status</Label>
+                 <Select value={editingBooking.status} onValueChange={(value) => setEditingBooking({...editingBooking, status: value})}>
+                   <SelectTrigger>
+                     <SelectValue />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="pending">Pending</SelectItem>
+                     <SelectItem value="confirmed">Confirmed</SelectItem>
+                     <SelectItem value="completed">Completed</SelectItem>
+                     <SelectItem value="cancelled">Cancelled</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+               <div>
+                 <Label htmlFor="date">Date</Label>
+                 <Input
+                   type="date"
+                   value={editingBooking.booking_date}
+                   onChange={(e) => setEditingBooking({...editingBooking, booking_date: e.target.value})}
+                 />
+               </div>
+               <div>
+                 <Label htmlFor="time">Time</Label>
+                 <Input
+                   type="time"
+                   value={editingBooking.booking_time}
+                   onChange={(e) => setEditingBooking({...editingBooking, booking_time: e.target.value})}
+                 />
+               </div>
+             </div>
+
+             <div className="flex justify-end space-x-2 mt-6">
+               <Button variant="outline" onClick={handleCancel}>
+                 Cancel
+               </Button>
+               <Button onClick={handleSave}>
+                 Save Changes
+               </Button>
+             </div>
+           </div>
+         </div>
+       )}
+     </div>
+   )
+ }

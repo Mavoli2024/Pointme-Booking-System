@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Calendar, 
   Users, 
@@ -53,6 +56,11 @@ export default function BusinessDashboard() {
     averageRating: 0
   })
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
+  const [editingBooking, setEditingBooking] = useState<any>(null)
+  const [editingService, setEditingService] = useState<any>(null)
+  const [editingStaff, setEditingStaff] = useState<any>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editType, setEditType] = useState<'booking' | 'service' | 'staff' | null>(null)
 
   useEffect(() => {
     fetchBusinessData()
@@ -217,6 +225,90 @@ export default function BusinessDashboard() {
     }
   }
 
+  // Edit functions
+  const handleEdit = (type: 'booking' | 'service' | 'staff', item: any) => {
+    setEditType(type)
+    switch (type) {
+      case 'booking':
+        setEditingBooking(item)
+        break
+      case 'service':
+        setEditingService(item)
+        break
+      case 'staff':
+        setEditingStaff(item)
+        break
+    }
+    setShowEditModal(true)
+  }
+
+  const handleSave = async () => {
+    try {
+      const supabase = createClient()
+      
+      if (editType === 'booking' && editingBooking) {
+        const { error } = await supabase
+          .from('bookings')
+          .update({
+            status: editingBooking.status,
+            booking_date: editingBooking.booking_date,
+            booking_time: editingBooking.booking_time,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingBooking.id)
+        
+        if (error) throw error
+        console.log('✅ Booking updated successfully')
+      } else if (editType === 'service' && editingService) {
+        const { error } = await supabase
+          .from('services')
+          .update({
+            name: editingService.name,
+            description: editingService.description,
+            price: editingService.price,
+            duration: editingService.duration,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingService.id)
+        
+        if (error) throw error
+        console.log('✅ Service updated successfully')
+      } else if (editType === 'staff' && editingStaff) {
+        const { error } = await supabase
+          .from('users')
+          .update({
+            name: editingStaff.name,
+            email: editingStaff.email,
+            phone: editingStaff.phone,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingStaff.id)
+        
+        if (error) throw error
+        console.log('✅ Staff updated successfully')
+      }
+      
+      // Refresh data
+      await fetchBusinessData()
+      setShowEditModal(false)
+      setEditingBooking(null)
+      setEditingService(null)
+      setEditingStaff(null)
+      setEditType(null)
+    } catch (error) {
+      console.error('❌ Error updating:', error)
+      alert('Failed to update. Please try again.')
+    }
+  }
+
+  const handleCancel = () => {
+    setShowEditModal(false)
+    setEditingBooking(null)
+    setEditingService(null)
+    setEditingStaff(null)
+    setEditType(null)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -371,6 +463,14 @@ export default function BusinessDashboard() {
                            <p className="text-sm font-medium mt-1">
                              R{booking.services?.price || 0}
                            </p>
+                           <Button 
+                             variant="outline" 
+                             size="sm" 
+                             className="mt-2"
+                             onClick={() => handleEdit('booking', booking)}
+                           >
+                             <Edit className="h-4 w-4" />
+                           </Button>
                          </div>
                        </div>
                      ))}
@@ -542,7 +642,12 @@ export default function BusinessDashboard() {
                              </div>
                            </div>
                            <div className="flex space-x-2 mt-4">
-                             <Button variant="outline" size="sm" className="flex-1">
+                             <Button 
+                               variant="outline" 
+                               size="sm" 
+                               className="flex-1"
+                               onClick={() => handleEdit('service', service)}
+                             >
                                <Edit className="h-4 w-4 mr-2" />
                                Edit
                              </Button>
@@ -616,7 +721,12 @@ export default function BusinessDashboard() {
                                </span>
                              </div>
                              <div className="flex space-x-2 mt-3">
-                               <Button variant="outline" size="sm" className="flex-1">
+                               <Button 
+                                 variant="outline" 
+                                 size="sm" 
+                                 className="flex-1"
+                                 onClick={() => handleEdit('staff', member)}
+                               >
                                  <Edit className="h-4 w-4 mr-2" />
                                  Edit
                                </Button>
@@ -1337,8 +1447,125 @@ export default function BusinessDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  )
-}
+                 </Tabs>
+       </div>
+
+       {/* Edit Modal */}
+       {showEditModal && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+           <div className="bg-white rounded-lg p-6 w-full max-w-md">
+             <h3 className="text-lg font-semibold mb-4">
+               Edit {editType === 'booking' ? 'Booking' : editType === 'service' ? 'Service' : 'Staff Member'}
+             </h3>
+             
+             {editType === 'booking' && editingBooking && (
+               <div className="space-y-4">
+                 <div>
+                   <Label htmlFor="status">Status</Label>
+                   <Select value={editingBooking.status} onValueChange={(value) => setEditingBooking({...editingBooking, status: value})}>
+                     <SelectTrigger>
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="pending">Pending</SelectItem>
+                       <SelectItem value="confirmed">Confirmed</SelectItem>
+                       <SelectItem value="completed">Completed</SelectItem>
+                       <SelectItem value="cancelled">Cancelled</SelectItem>
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 <div>
+                   <Label htmlFor="date">Date</Label>
+                   <Input
+                     type="date"
+                     value={editingBooking.booking_date}
+                     onChange={(e) => setEditingBooking({...editingBooking, booking_date: e.target.value})}
+                   />
+                 </div>
+                 <div>
+                   <Label htmlFor="time">Time</Label>
+                   <Input
+                     type="time"
+                     value={editingBooking.booking_time}
+                     onChange={(e) => setEditingBooking({...editingBooking, booking_time: e.target.value})}
+                   />
+                 </div>
+               </div>
+             )}
+
+             {editType === 'service' && editingService && (
+               <div className="space-y-4">
+                 <div>
+                   <Label htmlFor="name">Name</Label>
+                   <Input
+                     value={editingService.name}
+                     onChange={(e) => setEditingService({...editingService, name: e.target.value})}
+                   />
+                 </div>
+                 <div>
+                   <Label htmlFor="description">Description</Label>
+                   <Input
+                     value={editingService.description}
+                     onChange={(e) => setEditingService({...editingService, description: e.target.value})}
+                   />
+                 </div>
+                 <div>
+                   <Label htmlFor="price">Price</Label>
+                   <Input
+                     type="number"
+                     value={editingService.price}
+                     onChange={(e) => setEditingService({...editingService, price: parseFloat(e.target.value)})}
+                   />
+                 </div>
+                 <div>
+                   <Label htmlFor="duration">Duration (minutes)</Label>
+                   <Input
+                     type="number"
+                     value={editingService.duration}
+                     onChange={(e) => setEditingService({...editingService, duration: parseInt(e.target.value)})}
+                   />
+                 </div>
+               </div>
+             )}
+
+             {editType === 'staff' && editingStaff && (
+               <div className="space-y-4">
+                 <div>
+                   <Label htmlFor="name">Name</Label>
+                   <Input
+                     value={editingStaff.name}
+                     onChange={(e) => setEditingStaff({...editingStaff, name: e.target.value})}
+                   />
+                 </div>
+                 <div>
+                   <Label htmlFor="email">Email</Label>
+                   <Input
+                     type="email"
+                     value={editingStaff.email}
+                     onChange={(e) => setEditingStaff({...editingStaff, email: e.target.value})}
+                   />
+                 </div>
+                 <div>
+                   <Label htmlFor="phone">Phone</Label>
+                   <Input
+                     value={editingStaff.phone}
+                     onChange={(e) => setEditingStaff({...editingStaff, phone: e.target.value})}
+                   />
+                 </div>
+               </div>
+             )}
+
+             <div className="flex justify-end space-x-2 mt-6">
+               <Button variant="outline" onClick={handleCancel}>
+                 Cancel
+               </Button>
+               <Button onClick={handleSave}>
+                 Save Changes
+               </Button>
+             </div>
+           </div>
+         </div>
+       )}
+     </div>
+   )
+ }
