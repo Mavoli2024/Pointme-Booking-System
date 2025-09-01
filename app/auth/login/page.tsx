@@ -27,114 +27,37 @@ export default function LoginPage() {
     setError("")
 
     try {
-      const supabase = createClient()
-
-      if (
-        (formData.email === "admin@pointme.co.za" || formData.email === "admin@pointme.com") &&
-        formData.password === "admin123"
-      ) {
-        const adminUser = {
-          id: "admin-user-id",
-          email: formData.email,
-          name: "Platform Admin",
-          role: "admin",
-          created_at: new Date().toISOString(),
-        }
-
-        localStorage.setItem("userInfo", JSON.stringify(adminUser))
-        localStorage.setItem(
-          "adminSession",
-          JSON.stringify({
-            user: adminUser,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          }),
-        )
-
-        document.cookie = "admin_session=true; path=/; max-age=86400"
-        document.cookie = `user_info=${JSON.stringify(adminUser)}; path=/; max-age=86400`
-
-        window.location.href = "/admin/dashboard"
-        return
-      }
-
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
+      // Use our custom login API
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
       })
 
-      if (authError) {
-        if (authError.message.includes("Invalid login credentials")) {
-          setError("Invalid email or password. Please check your credentials.")
-        } else if (authError.message.includes("Email not confirmed")) {
-          // For development: Allow login even if email is not confirmed
-          console.log("Development mode: Bypassing email confirmation")
-          
-          // Try to get user profile from database
-          const { data: profile } = await supabase
-            .from("users")
-            .select("*")
-            .eq("email", formData.email)
-            .single()
-          
-          if (profile) {
-            // Store user info and redirect
-            localStorage.setItem("userInfo", JSON.stringify(profile))
-            document.cookie = `user_info=${JSON.stringify(profile)}; path=/; max-age=86400`
-            
-            if (profile.role === "business_owner") {
-              window.location.href = "/business/pending-approval"
-            } else {
-              window.location.href = "/dashboard"
-            }
-            return
-          } else {
-            setError("Please check your email and confirm your account before signing in.")
-          }
-        } else {
-          setError(`Authentication error: ${authError.message}`)
-        }
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error || "Login failed")
         return
       }
 
-      if (data.user) {
-        const userRole = data.user.user_metadata?.role
+      // Store user info
+      localStorage.setItem("userInfo", JSON.stringify(result.user))
+      document.cookie = `user_info=${JSON.stringify(result.user)}; path=/; max-age=86400`
 
-        if (userRole === "admin") {
-          window.location.href = "/admin/dashboard"
-          return
-        }
-
-        const { data: profile, error: profileError } = await supabase
-          .from("users")
-          .select("role")
-          .eq("id", data.user.id)
-          .single()
-
-        if (profileError && !userRole) {
-          const storedUser = localStorage.getItem("userInfo")
-          if (storedUser) {
-            const userData = JSON.parse(storedUser)
-            if (userData.role === "business") {
-              window.location.href = "/business/dashboard"
-            } else {
-              window.location.href = "/dashboard"
-            }
-            return
-          }
-          setError("User profile not found. Please contact support.")
-          return
-        }
-
-        const role = profile?.role || userRole
-        if (role === "admin") {
-          window.location.href = "/admin/dashboard"
-        } else if (role === "business") {
-          window.location.href = "/business/dashboard"
-        } else {
-          window.location.href = "/dashboard"
-        }
+      // Redirect based on role
+      if (result.user.role === "admin") {
+        window.location.href = "/admin/dashboard"
+      } else if (result.user.role === "business_owner") {
+        window.location.href = "/business/dashboard"
+      } else {
+        window.location.href = "/dashboard"
       }
+
     } catch (err) {
+      console.error("Login error:", err)
       setError("Login failed. Please try again.")
     } finally {
       setIsLoading(false)
