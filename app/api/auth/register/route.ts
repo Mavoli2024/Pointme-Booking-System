@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
       name,
       phone,
       role,
+      email_verified: true, // Auto-verify for development
+      phone_verified: false,
     })
 
     if (userError) {
@@ -72,6 +74,8 @@ export async function POST(request: NextRequest) {
         description: businessData.description || "No description provided",
         email,
         phone,
+        address: businessData.address || "",
+        city: businessData.city || "",
         status: "pending",
       })
 
