@@ -9,8 +9,7 @@
     "start": "next start",
     "build:analyze": "ANALYZE=true next build",
     "type-check": "tsc --noEmit",
-    "test": "echo \"No tests specified\" && exit 0",
-    "postbuild": "next-sitemap"
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
