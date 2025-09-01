@@ -1,490 +1,476 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  Calendar,
-  Clock,
+import { 
+  Calendar, 
+  Users, 
+  DollarSign, 
+  Clock, 
   Star,
-  Search,
-  Bell,
-  User,
-  Heart,
-  CreditCard,
-  Receipt,
   MessageSquare,
-  Download,
-  AlertCircle,
-  RefreshCw,
-  MapPin,
-  Phone,
-  Mail,
   Settings,
   Plus,
-  Edit,
-  Filter,
   Eye,
+  Edit,
+  Trash2,
+  Download,
+  Filter,
+  BarChart3,
+  PieChart,
+  MapPin,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  RefreshCw,
+  Bell,
+  Mail,
+  Phone,
+  Heart,
+  Share2,
+  Camera,
+  Video,
+  CreditCard,
+  Wallet,
+  Gift,
+  TrendingUp,
+  Navigation,
+  CloudRain,
+  Sun,
+  Moon,
+  Clock3,
+  CalendarDays,
+  Repeat,
+  ArrowRight,
+  Search,
+  Filter as FilterIcon,
+  MapPin as MapPinIcon,
+  Star as StarIcon,
+  Clock as ClockIcon,
+  DollarSign as DollarSignIcon
 } from "lucide-react"
-import Link from "next/link"
 import { createClient } from "@/lib/supabase"
-import { 
-  getCustomerBookings,
-  getCustomerPayments,
-  getCustomerNotifications,
-  getCustomerProfile,
-  getCustomerStats,
-  markNotificationAsRead,
-  createBookingReview,
-  type CustomerBookingData,
-  type CustomerPaymentData,
-  type CustomerNotificationData,
-  type CustomerProfileData,
-  type CustomerStats
-} from "@/lib/customer-data"
+
+interface Booking {
+  id: string
+  booking_date: string
+  booking_time: string
+  status: string
+  services?: {
+    id: string
+    name: string
+    price: number
+    duration: number
+  }
+  businesses?: {
+    id: string
+    name: string
+    address: string
+    phone: string
+  }
+}
+
+interface Service {
+  id: string
+  name: string
+  price: number
+  duration: number
+  description: string
+  category_id: string
+}
+
+interface Provider {
+  id: string
+  name: string
+  rating: number
+  review_count: number
+  services: string[]
+  location: string
+  price_range: string
+  availability: string
+}
 
 export default function CustomerDashboard() {
-  const router = useRouter()
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
   const [searchQuery, setSearchQuery] = useState("")
+  const [filterCategory, setFilterCategory] = useState("all")
+  const [filterPrice, setFilterPrice] = useState("all")
+  const [filterRating, setFilterRating] = useState("all")
   
   // Data states
-  const [upcomingBookings, setUpcomingBookings] = useState<CustomerBookingData[]>([])
-  const [pastBookings, setPastBookings] = useState<CustomerBookingData[]>([])
-  const [cancelledBookings, setCancelledBookings] = useState<CustomerBookingData[]>([])
-  const [paymentHistory, setPaymentHistory] = useState<CustomerPaymentData[]>([])
-  const [notifications, setNotifications] = useState<CustomerNotificationData[]>([])
-  const [userProfile, setUserProfile] = useState<CustomerProfileData | null>(null)
-  const [stats, setStats] = useState<CustomerStats>({
-    totalBookings: 0,
-    completedBookings: 0,
-    pendingBookings: 0,
-    cancelledBookings: 0,
-    totalSpent: 0,
-    averageRating: 0,
-    favoriteCategory: 'None',
-    upcomingBookings: 0
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [services, setServices] = useState<Service[]>([])
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [recentlyViewed, setRecentlyViewed] = useState<Provider[]>([])
+  const [favorites, setFavorites] = useState<Provider[]>([])
+  const [userProfile, setUserProfile] = useState({
+    name: "John Doe",
+    email: "john@example.com",
+    phone: "+27 123 456 789",
+    preferences: ["Home Services", "Beauty", "Wellness"],
+    addresses: ["123 Main St, Cape Town", "456 Office Blvd, Johannesburg"],
+    paymentMethods: ["Visa ****1234", "Mastercard ****5678"]
   })
-  
-  // UI states
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [sortBy, setSortBy] = useState("date")
-  
-  // Profile form state
-  const [profileForm, setProfileForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-  })
-
-  // Notification preferences
-  const [notificationSettings, setNotificationSettings] = useState({
-    email: true,
-    sms: false,
-    push: true,
-    bookingReminders: true,
-    promotions: false
-  })
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
 
   useEffect(() => {
-    const checkAuth = () => {
-      const storedUser = localStorage.getItem("userInfo")
-      const adminSession = localStorage.getItem("admin_session")
+    fetchCustomerData()
+  }, [])
 
-      if (!storedUser && adminSession !== "true") {
-        router.push("/auth/login")
-        return
-      }
-
-      if (adminSession === "true") {
-        router.push("/admin/dashboard")
-        return
-      }
-    }
-
-    checkAuth()
-    fetchDashboardData()
-  }, [router])
-
-  const fetchDashboardData = async () => {
-    try {
-      setIsLoading(true)
-      const storedUser = JSON.parse(localStorage.getItem("userInfo") || "{}")
-      const customerEmail = storedUser.email
-
-      if (!customerEmail) {
-        console.error("No customer email found")
-        return
-      }
-
-      // Fetch all customer data in parallel
-      const [bookingsData, paymentsData, notificationsData, profileData, statsData] = await Promise.all([
-        getCustomerBookings(customerEmail),
-        getCustomerPayments(customerEmail),
-        getCustomerNotifications(customerEmail),
-        getCustomerProfile(customerEmail),
-        getCustomerStats(customerEmail)
-      ])
-
-      // Set profile data and form
-      setUserProfile(profileData)
-      if (profileData?.name) {
-        const nameParts = profileData.name.split(" ")
-        setProfileForm({
-          firstName: nameParts[0] || "",
-          lastName: nameParts.slice(1).join(" ") || "",
-          email: profileData.email || "",
-          phone: profileData.phone || "",
-        })
-      }
-
-      // Categorize bookings
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const upcoming = bookingsData.filter(booking => {
-        const bookingDate = new Date(booking.booking_date)
-        return bookingDate >= today && booking.status !== "cancelled"
-      })
-
-      const past = bookingsData.filter(booking => {
-        const bookingDate = new Date(booking.booking_date)
-        return bookingDate < today && booking.status !== "cancelled"
-      })
-
-      const cancelled = bookingsData.filter(booking => booking.status === "cancelled")
-
-      setUpcomingBookings(upcoming)
-      setPastBookings(past)
-      setCancelledBookings(cancelled)
-      setPaymentHistory(paymentsData)
-      setNotifications(notificationsData)
-      setStats(statsData)
-
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
-    } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
-    }
-  }
-
-  const handleRefresh = () => {
-    setIsRefreshing(true)
-    fetchDashboardData()
-  }
-
-  const handleCancelBooking = async (bookingId: string) => {
+  const fetchCustomerData = async () => {
     try {
       const supabase = createClient()
-      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId)
-      fetchDashboardData()
-    } catch (error) {
-      console.error("Error cancelling booking:", error)
-    }
-  }
-
-  const handleMarkNotificationAsRead = async (notificationId: string) => {
-    try {
-      const success = await markNotificationAsRead(notificationId)
-      if (success) {
-        fetchDashboardData()
-      }
-    } catch (error) {
-      console.error("Error marking notification as read:", error)
-    }
-  }
-
-  const handleSaveProfile = async () => {
-    try {
-      const supabase = createClient()
-      const storedUser = JSON.parse(localStorage.getItem("userInfo") || "{}")
       
-      if (storedUser.email) {
-        await supabase.from("users").upsert({
-          email: profileForm.email,
-          name: `${profileForm.firstName} ${profileForm.lastName}`.trim(),
-          phone: profileForm.phone,
-        })
-        fetchDashboardData()
+      console.log('🔍 Fetching customer data...')
+      console.log('📊 Supabase client created:', !!supabase)
+      
+      // Fetch user's bookings
+      console.log('📅 Fetching bookings...')
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          services!bookings_service_id_fkey (
+            id,
+            name,
+            price,
+            duration
+          ),
+          businesses!bookings_business_id_fkey (
+            id,
+            name,
+            address,
+            phone
+          )
+        `)
+        .order('booking_date', { ascending: false })
+
+      if (bookingsError) {
+        console.error('❌ Bookings error:', bookingsError)
+        throw new Error(`Bookings fetch failed: ${bookingsError.message}`)
       }
+      
+      console.log('✅ Bookings fetched:', bookingsData?.length || 0)
+
+      // Fetch available services
+      console.log('🔧 Fetching services...')
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (servicesError) {
+        console.error('❌ Services error:', servicesError)
+        throw new Error(`Services fetch failed: ${servicesError.message}`)
+      }
+      console.log('✅ Services fetched:', servicesData?.length || 0)
+
+      // Set data
+      setBookings(bookingsData || [])
+      setServices(servicesData || [])
+      
+      // Generate mock providers for demo
+      const mockProviders: Provider[] = [
+        {
+          id: "1",
+          name: "Beauty Haven Spa",
+          rating: 4.8,
+          review_count: 127,
+          services: ["Facial", "Massage", "Manicure"],
+          location: "Cape Town CBD",
+          price_range: "R200-R800",
+          availability: "Mon-Sat 9AM-7PM"
+        },
+        {
+          id: "2",
+          name: "Home Clean Pro",
+          rating: 4.6,
+          review_count: 89,
+          services: ["Deep Cleaning", "Regular Cleaning", "Move-in/out"],
+          location: "Johannesburg North",
+          price_range: "R150-R500",
+          availability: "Mon-Fri 8AM-6PM"
+        },
+        {
+          id: "3",
+          name: "Tech Fix Express",
+          rating: 4.9,
+          review_count: 203,
+          services: ["Computer Repair", "Phone Repair", "Network Setup"],
+          location: "Pretoria East",
+          price_range: "R100-R1200",
+          availability: "Mon-Sat 8AM-8PM"
+        }
+      ]
+      
+      setProviders(mockProviders)
+      setRecentlyViewed(mockProviders.slice(0, 2))
+      setFavorites(mockProviders.slice(0, 1))
+      
+      console.log('✅ All data set successfully')
+      setConnectionStatus('connected')
+      setLoading(false)
     } catch (error) {
-      console.error("Error saving profile:", error)
+      console.error('❌ Error fetching customer data:', error)
+      setConnectionStatus('disconnected')
+      setLoading(false)
     }
   }
 
-  // Filter and sort bookings
-  const allBookings = [...upcomingBookings, ...pastBookings, ...cancelledBookings]
-  const filteredBookings = allBookings.filter(booking => {
-    if (filterStatus !== "all" && booking.status !== filterStatus) return false
-    if (searchQuery && !booking.service_name.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !booking.business_name.toLowerCase().includes(searchQuery.toLowerCase())) return false
-    return true
-  })
+  const getUpcomingBookings = () => {
+    const today = new Date()
+    return bookings.filter(booking => {
+      const bookingDate = new Date(booking.booking_date)
+      return bookingDate >= today && booking.status !== 'cancelled'
+    }).slice(0, 3)
+  }
 
-  const sortedBookings = [...filteredBookings].sort((a, b) => {
-    if (sortBy === "date") {
-      return new Date(b.booking_date).getTime() - new Date(a.booking_date).getTime()
-    }
-    if (sortBy === "amount") {
-      return b.total_amount - a.total_amount
-    }
-    return 0
-  })
+  const getPastBookings = () => {
+    const today = new Date()
+    return bookings.filter(booking => {
+      const bookingDate = new Date(booking.booking_date)
+      return bookingDate < today || booking.status === 'cancelled'
+    }).slice(0, 5)
+  }
 
-  if (isLoading) {
+  const getBookingStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed': return 'bg-green-100 text-green-800'
+      case 'pending': return 'bg-yellow-100 text-yellow-800'
+      case 'cancelled': return 'bg-red-100 text-red-800'
+      case 'completed': return 'bg-blue-100 text-blue-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getWeatherIcon = () => {
+    // Mock weather - in real app, integrate with weather API
+    return <Sun className="h-6 w-6 text-yellow-500" />
+  }
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your dashboard...</p>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg text-muted-foreground">Loading customer dashboard...</p>
+          <p className="text-sm text-muted-foreground mt-2">Connecting to database...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="h-8 w-8 bg-accent rounded-lg flex items-center justify-center">
-                <span className="text-accent-foreground font-bold text-lg">P</span>
-              </div>
-              <span className="text-xl font-bold text-foreground">PointMe</span>
-            </Link>
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search services, providers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
-              </div>
-              <Button variant="ghost" size="sm" className="relative" onClick={() => setShowNotifications(!showNotifications)}>
-                <Bell className="h-4 w-4" />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
-                    {notifications.filter(n => !n.read).length}
-                  </Badge>
-                )}
-              </Button>
-              <Button variant="ghost" size="sm">
-                <User className="h-4 w-4" />
-              </Button>
-              <Link href="/auth/login">
-                <Button variant="ghost" size="sm">
-                  Sign Out
-                </Button>
-              </Link>
+    <div className="min-h-screen bg-background p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header with Connection Status */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Welcome back, {userProfile.name}!</h1>
+            <p className="text-muted-foreground">Manage your bookings, discover services, and track your spending</p>
+            <div className="flex items-center space-x-2 mt-2">
+              <div className={`w-2 h-2 rounded-full ${
+                connectionStatus === 'connected' ? 'bg-green-500' :
+                connectionStatus === 'disconnected' ? 'bg-red-500' :
+                'bg-yellow-500'
+              }`}></div>
+              <span className="text-sm text-muted-foreground">
+                {connectionStatus === 'connected' ? 'Connected to Database' :
+                 connectionStatus === 'disconnected' ? 'Database Disconnected' :
+                 'Checking Connection...'}
+              </span>
             </div>
           </div>
-        </div>
-      </header>
-
-      {/* Notifications Panel */}
-      {showNotifications && (
-        <div className="absolute top-20 right-4 w-80 bg-white border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
-          <div className="p-4 border-b">
-            <h3 className="font-semibold">Notifications</h3>
-          </div>
-          <div className="p-2">
-            {notifications.length === 0 ? (
-              <div className="text-center py-4 text-muted-foreground">
-                No notifications
-              </div>
-            ) : (
-              notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-3 border-b last:border-b-0 cursor-pointer hover:bg-gray-50 ${
-                    !notification.read ? "bg-blue-50" : ""
-                  }`}
-                  onClick={() => handleMarkNotificationAsRead(notification.id)}
-                >
-                  <div className="flex items-start space-x-3">
-                    <Bell className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-medium text-sm">{notification.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">{notification.message}</p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {new Date(notification.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {!notification.read && <div className="h-2 w-2 bg-blue-500 rounded-full"></div>}
-                  </div>
-                </div>
-              ))
-            )}
+          <div className="flex space-x-3">
+            <Button variant="outline" onClick={fetchCustomerData}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button variant="outline">
+              <Bell className="h-4 w-4 mr-2" />
+              Notifications
+            </Button>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Book Service
+            </Button>
           </div>
         </div>
-      )}
 
-      <div className="container mx-auto px-4 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Welcome back, {userProfile?.name || "Customer"}!
-          </h1>
-          <p className="text-muted-foreground">Manage your bookings and discover new services</p>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {/* Quick Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming Bookings</CardTitle>
+              <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{upcomingBookings.length}</div>
+              <div className="text-2xl font-bold">{getUpcomingBookings().length}</div>
               <p className="text-xs text-muted-foreground">
-                {upcomingBookings.length > 0
-                  ? `Next: ${new Date(upcomingBookings[0]?.booking_date).toLocaleDateString()}`
-                  : "No upcoming bookings"}
+                {getUpcomingBookings().filter(b => b.status === 'pending').length} pending
               </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalBookings}</div>
-              <p className="text-xs text-muted-foreground">All time</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Rating</CardTitle>
-              <Star className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.averageRating.toFixed(1)}</div>
-              <p className="text-xs text-muted-foreground">From {stats.completedBookings} reviews</p>
-            </CardContent>
-          </Card>
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">R{stats.totalSpent.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">This year</p>
+              <div className="text-2xl font-bold">
+                R{bookings.reduce((sum, booking) => sum + (booking.services?.price || 0), 0).toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground">This month</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Services Used</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{bookings.length}</div>
+              <p className="text-xs text-muted-foreground">
+                {bookings.filter(b => b.status === 'completed').length} completed
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Weather</CardTitle>
+              {getWeatherIcon()}
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">22°C</div>
+              <p className="text-xs text-muted-foreground">Perfect for outdoor services</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="bookings">Bookings</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="favorites">Favorites</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="discover">Discover</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="payments">Payments</TabsTrigger>
+            <TabsTrigger value="support">Support</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="community">Community</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Upcoming Bookings */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Your latest bookings and activities</CardDescription>
+                  <CardTitle>Upcoming Bookings</CardTitle>
+                  <CardDescription>Your next appointments</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {sortedBookings.slice(0, 5).map((booking) => (
-                      <div key={booking.id} className="flex items-center space-x-4">
-                        <Avatar>
-                          <AvatarFallback>
-                            {booking.business_name.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                    {getUpcomingBookings().map((booking, index) => (
+                      <div key={booking.id || index} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex-1">
-                          <p className="text-sm font-medium">
-                            {booking.service_name} at {booking.business_name}
+                          <p className="font-medium">{booking.services?.name || 'Unknown Service'}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(booking.booking_date).toLocaleDateString()} at {booking.booking_time}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(booking.booking_date).toLocaleDateString()} • R{booking.total_amount}
+                          <p className="text-sm text-muted-foreground">
+                            {booking.businesses?.name || 'Unknown Provider'}
                           </p>
                         </div>
-                        <Badge variant={booking.status === "completed" ? "default" : "secondary"}>
-                          {booking.status}
-                        </Badge>
+                        <div className="text-right">
+                          <Badge className={getBookingStatusColor(booking.status)}>
+                            {booking.status || 'Unknown'}
+                          </Badge>
+                          <p className="text-sm font-medium mt-1">
+                            R{booking.services?.price || 0}
+                          </p>
+                        </div>
                       </div>
                     ))}
-                    {sortedBookings.length === 0 && (
+                    {getUpcomingBookings().length === 0 && (
                       <div className="text-center py-4 text-muted-foreground">
-                        No bookings yet
+                        No upcoming bookings. Book a service to get started!
                       </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
 
+              {/* Quick Actions */}
               <Card>
                 <CardHeader>
                   <CardTitle>Quick Actions</CardTitle>
                   <CardDescription>Common tasks and shortcuts</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Link href="/services">
-                      <Button variant="outline" className="h-20 flex-col w-full">
-                        <Calendar className="h-6 w-6 mb-2" />
-                        <span className="text-sm">Book Service</span>
-                      </Button>
-                    </Link>
-                    <Link href="/services">
-                      <Button variant="outline" className="h-20 flex-col w-full">
-                        <Search className="h-6 w-6 mb-2" />
-                        <span className="text-sm">Find Providers</span>
-                      </Button>
-                    </Link>
-                    <Link href="/contact">
-                      <Button variant="outline" className="h-20 flex-col w-full">
-                        <MessageSquare className="h-6 w-6 mb-2" />
-                        <span className="text-sm">Support</span>
-                      </Button>
-                    </Link>
-                    <Button variant="outline" className="h-20 flex-col" onClick={() => setActiveTab("profile")}>
-                      <Settings className="h-6 w-6 mb-2" />
-                      <span className="text-sm">Settings</span>
-                    </Button>
-                  </div>
+                <CardContent className="space-y-3">
+                  <Button variant="outline" className="w-full justify-start">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Book New Service
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <Repeat className="h-4 w-4 mr-2" />
+                    Rebook Last Service
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Contact Provider
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <Star className="h-4 w-4 mr-2" />
+                    Leave Review
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Receipt
+                  </Button>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Service Recommendations */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recommended for You</CardTitle>
+                <CardDescription>Based on your booking history and preferences</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {services.slice(0, 3).map((service, index) => (
+                    <Card key={service.id || index}>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">{service.name}</CardTitle>
+                        <CardDescription>{service.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center">
+                          <div className="text-sm text-muted-foreground">
+                            {service.duration} min • R{service.price}
+                          </div>
+                          <Button size="sm">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Book
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Bookings Tab */}
@@ -493,346 +479,245 @@ export default function CustomerDashboard() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
-                    <CardTitle>Booking Management</CardTitle>
-                    <CardDescription>Manage and track all your bookings</CardDescription>
+                    <CardTitle>All Bookings</CardTitle>
+                    <CardDescription>Manage your appointments and service history</CardDescription>
                   </div>
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                      Refresh
+                    <Button variant="outline" size="sm">
+                      <Filter className="h-4 w-4 mr-2" />
+                      Filter
                     </Button>
-                    <Link href="/services">
-                      <Button size="sm">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Book New Service
-                      </Button>
-                    </Link>
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                {/* Filters */}
-                <div className="flex space-x-4 mb-6">
-                  <Input
-                    placeholder="Search bookings..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="max-w-xs"
-                  />
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="date">Date</SelectItem>
-                      <SelectItem value="amount">Amount</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Bookings List */}
                 <div className="space-y-4">
-                  {sortedBookings.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">No bookings found</p>
-                      <Link href="/services">
-                        <Button className="mt-4">Browse Services</Button>
-                      </Link>
-                    </div>
-                  ) : (
-                    sortedBookings.map((booking) => (
-                      <div key={booking.id} className="border border-border rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-4">
-                            <Avatar>
-                              <AvatarFallback>
-                                {booking.business_name.charAt(0).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="space-y-1">
-                              <h3 className="font-semibold">{booking.service_name}</h3>
-                              <p className="text-sm text-muted-foreground">{booking.business_name}</p>
-                              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                                <div className="flex items-center space-x-1">
-                                  <Calendar className="h-4 w-4" />
-                                  <span>{new Date(booking.booking_date).toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <Clock className="h-4 w-4" />
-                                  <span>{booking.booking_time}</span>
-                                </div>
-                              </div>
-                            </div>
+                  {bookings.map((booking, index) => (
+                    <div key={booking.id || index} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-4">
+                          <div>
+                            <p className="font-medium">{booking.services?.name || 'Unknown Service'}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {booking.businesses?.name || 'Unknown Provider'}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {booking.businesses?.address || 'No address'}
+                            </p>
                           </div>
-                          <div className="text-right space-y-2">
-                            <div className="text-lg font-semibold">R{booking.total_amount}</div>
-                            <Badge variant={booking.status === "completed" ? "default" : "secondary"}>
-                              {booking.status}
-                            </Badge>
-                            <div className="flex space-x-2">
-                              {booking.status === "confirmed" && (
-                                <Button variant="ghost" size="sm" onClick={() => handleCancelBooking(booking.id)}>
-                                  Cancel
-                                </Button>
-                              )}
-                              {booking.status === "completed" && (
-                                <Button size="sm">Review</Button>
-                              )}
-                            </div>
+                          <div className="text-sm text-muted-foreground">
+                            <p>{new Date(booking.booking_date).toLocaleDateString()}</p>
+                            <p>{booking.booking_time}</p>
                           </div>
                         </div>
                       </div>
-                    ))
+                      <div className="flex items-center space-x-2">
+                        <Badge className={getBookingStatusColor(booking.status)}>
+                          {booking.status || 'Unknown'}
+                        </Badge>
+                        <p className="font-medium">R{booking.services?.price || 0}</p>
+                        <Button variant="outline" size="sm">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Repeat className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {bookings.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No bookings found. Start by booking your first service!
+                    </div>
                   )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Payments Tab */}
-          <TabsContent value="payments" className="space-y-6">
+          {/* Discover Tab */}
+          <TabsContent value="discover" className="space-y-6">
+            {/* Search and Filters */}
             <Card>
               <CardHeader>
-                <CardTitle>Payment History</CardTitle>
-                <CardDescription>Your transaction history and receipts</CardDescription>
+                <CardTitle>Discover Services</CardTitle>
+                <CardDescription>Find the perfect service provider for your needs</CardDescription>
               </CardHeader>
               <CardContent>
-                {paymentHistory.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No payment history</p>
+                <div className="space-y-4">
+                  <div className="flex space-x-2">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Search services, providers, or locations..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <Button>
+                      <Search className="h-4 w-4 mr-2" />
+                      Search
+                    </Button>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {paymentHistory.map((payment) => (
-                      <div key={payment.id} className="border border-border rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <h3 className="font-semibold">{payment.booking.service_name}</h3>
-                            <p className="text-sm text-muted-foreground">{payment.booking.business_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(payment.created_at).toLocaleDateString()} • {payment.payment_method}
-                            </p>
-                          </div>
-                          <div className="text-right space-y-2">
-                            <div className="text-lg font-semibold">R{payment.amount}</div>
-                            <Badge variant={payment.status === "completed" ? "default" : "secondary"}>
-                              {payment.status}
-                            </Badge>
-                            <Button variant="outline" size="sm">
-                              <Download className="h-4 w-4 mr-1" />
-                              Receipt
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={filterCategory === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFilterCategory("all")}
+                    >
+                      All Categories
+                    </Button>
+                    <Button
+                      variant={filterCategory === "beauty" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFilterCategory("beauty")}
+                    >
+                      Beauty & Wellness
+                    </Button>
+                    <Button
+                      variant={filterCategory === "home" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFilterCategory("home")}
+                    >
+                      Home Services
+                    </Button>
+                    <Button
+                      variant={filterCategory === "tech" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFilterCategory("tech")}
+                    >
+                      Tech Services
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Favorites Tab */}
-          <TabsContent value="favorites" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Favorite Providers</CardTitle>
-                <CardDescription>Your saved service providers</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <Heart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No favorite providers yet</p>
-                  <Link href="/services">
-                    <Button className="mt-4">Discover Services</Button>
-                  </Link>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Provider Listings */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {providers.map((provider) => (
+                <Card key={provider.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{provider.name}</CardTitle>
+                        <CardDescription>{provider.location}</CardDescription>
+                      </div>
+                      <Button variant="ghost" size="sm">
+                        <Heart className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <Star className="h-4 w-4 text-yellow-400 fill-current" />
+                      <span className="font-medium">{provider.rating}</span>
+                      <span className="text-sm text-muted-foreground">
+                        ({provider.review_count} reviews)
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2 text-sm">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span>{provider.availability}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <span>{provider.price_range}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-1">
+                      {provider.services.slice(0, 3).map((service, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {service}
+                        </Badge>
+                      ))}
+                    </div>
+                    
+                    <div className="flex space-x-2 pt-2">
+                      <Button size="sm" className="flex-1">
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Book Now
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </TabsContent>
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications" className="space-y-6">
+          {/* Other tabs placeholder */}
+          <TabsContent value="profile" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Notification Center</CardTitle>
-                <CardDescription>Stay updated with your bookings and account</CardDescription>
+                <CardTitle>Profile & Preferences</CardTitle>
+                <CardDescription>Manage your personal information and settings</CardDescription>
               </CardHeader>
               <CardContent>
-                {notifications.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No notifications</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`border border-border rounded-lg p-4 cursor-pointer hover:bg-gray-50 ${
-                          !notification.read ? "bg-blue-50" : ""
-                        }`}
-                        onClick={() => handleMarkNotificationAsRead(notification.id)}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <Bell className="h-5 w-5 text-muted-foreground mt-0.5" />
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{notification.title}</h3>
-                            <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
-                            <p className="text-xs text-muted-foreground mt-2">
-                              {new Date(notification.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          {!notification.read && <div className="h-2 w-2 bg-blue-500 rounded-full"></div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <p className="text-muted-foreground">Profile management features coming soon...</p>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Profile Tab */}
-          <TabsContent value="profile" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile Settings</CardTitle>
-                  <CardDescription>Manage your account information</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
-                      <Avatar className="h-20 w-20">
-                        <AvatarFallback>
-                          {profileForm.firstName?.[0] || userProfile?.name?.[0] || "U"}
-                          {profileForm.lastName?.[0] || ""}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          {profileForm.firstName} {profileForm.lastName}
-                        </h3>
-                        <p className="text-muted-foreground">{profileForm.email}</p>
-                        <Button variant="outline" size="sm" className="mt-2">
-                          Change Photo
-                        </Button>
-                      </div>
-                    </div>
+          <TabsContent value="payments" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment & Financial</CardTitle>
+                <CardDescription>Manage your payment methods and track spending</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">Payment features coming soon...</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">First Name</label>
-                        <Input
-                          value={profileForm.firstName}
-                          onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                          placeholder="Enter your first name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Last Name</label>
-                        <Input
-                          value={profileForm.lastName}
-                          onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
-                          placeholder="Enter your last name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Email</label>
-                        <Input
-                          value={profileForm.email}
-                          onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                          placeholder="Enter your email"
-                          type="email"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Phone</label>
-                        <Input
-                          value={profileForm.phone}
-                          onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                          placeholder="Enter your phone number"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button variant="outline">Cancel</Button>
-                      <Button onClick={handleSaveProfile}>Save Changes</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          <TabsContent value="support" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer Support</CardTitle>
+                <CardDescription>Get help when you need it</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">Support features coming soon...</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notification Preferences</CardTitle>
-                  <CardDescription>Manage how you receive notifications</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="email-notifications">Email Notifications</Label>
-                        <p className="text-sm text-muted-foreground">Receive notifications via email</p>
-                      </div>
-                      <Switch
-                        id="email-notifications"
-                        checked={notificationSettings.email}
-                        onCheckedChange={(checked) => setNotificationSettings({ ...notificationSettings, email: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="sms-notifications">SMS Notifications</Label>
-                        <p className="text-sm text-muted-foreground">Receive notifications via SMS</p>
-                      </div>
-                      <Switch
-                        id="sms-notifications"
-                        checked={notificationSettings.sms}
-                        onCheckedChange={(checked) => setNotificationSettings({ ...notificationSettings, sms: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="push-notifications">Push Notifications</Label>
-                        <p className="text-sm text-muted-foreground">Receive push notifications</p>
-                      </div>
-                      <Switch
-                        id="push-notifications"
-                        checked={notificationSettings.push}
-                        onCheckedChange={(checked) => setNotificationSettings({ ...notificationSettings, push: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="booking-reminders">Booking Reminders</Label>
-                        <p className="text-sm text-muted-foreground">Get reminded about upcoming bookings</p>
-                      </div>
-                      <Switch
-                        id="booking-reminders"
-                        checked={notificationSettings.bookingReminders}
-                        onCheckedChange={(checked) => setNotificationSettings({ ...notificationSettings, bookingReminders: checked })}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="notifications" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Notifications</CardTitle>
+                <CardDescription>Manage your alerts and preferences</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">Notification features coming soon...</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="community" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Community & Social</CardTitle>
+                <CardDescription>Connect with other users and share experiences</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">Community features coming soon...</p>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

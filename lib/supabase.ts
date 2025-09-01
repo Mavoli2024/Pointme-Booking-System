@@ -50,8 +50,8 @@ const validateEnvironmentVariables = () => {
   if (!supabaseUrl || !supabaseKey) {
     console.warn("⚠️ Supabase environment variables not found. Using placeholder values for development.")
     return {
-      supabaseUrl: "https://placeholder.supabase.co",
-      supabaseKey: "placeholder-key"
+      supabaseUrl: "https://kazxsniyffosngltskkm.supabase.co",
+      supabaseKey: "eyJhbGci0iJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3Mi0iJzdXBhYm"
     }
   }
 
