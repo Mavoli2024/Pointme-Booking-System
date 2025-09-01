@@ -164,43 +164,34 @@ export default function CustomerDashboard() {
       setBookings(bookingsData || [])
       setServices(servicesData || [])
       
-      // Generate mock providers for demo
-      const mockProviders: Provider[] = [
-        {
-          id: "1",
-          name: "Beauty Haven Spa",
-          rating: 4.8,
-          review_count: 127,
-          services: ["Facial", "Massage", "Manicure"],
-          location: "Cape Town CBD",
-          price_range: "R200-R800",
-          availability: "Mon-Sat 9AM-7PM"
-        },
-        {
-          id: "2",
-          name: "Home Clean Pro",
-          rating: 4.6,
-          review_count: 89,
-          services: ["Deep Cleaning", "Regular Cleaning", "Move-in/out"],
-          location: "Johannesburg North",
-          price_range: "R150-R500",
-          availability: "Mon-Fri 8AM-6PM"
-        },
-        {
-          id: "3",
-          name: "Tech Fix Express",
-          rating: 4.9,
-          review_count: 203,
-          services: ["Computer Repair", "Phone Repair", "Network Setup"],
-          location: "Pretoria East",
-          price_range: "R100-R1200",
-          availability: "Mon-Sat 8AM-8PM"
-        }
-      ]
+      // Fetch businesses (providers) from Supabase
+      console.log('🏢 Fetching businesses...')
+      const { data: businessesData, error: businessesError } = await supabase
+        .from('businesses')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (businessesError) {
+        console.error('❌ Businesses error:', businessesError)
+        throw new Error(`Businesses fetch failed: ${businessesError.message}`)
+      }
+      console.log('✅ Businesses fetched:', businessesData?.length || 0)
+
+      // Convert businesses to provider format
+      const realProviders: Provider[] = (businessesData || []).map(business => ({
+        id: business.id,
+        name: business.name || 'Unnamed Business',
+        rating: 4.5, // Default rating - you can fetch from reviews table later
+        review_count: 0, // You can calculate this from reviews table
+        services: [], // You can fetch related services later
+        location: business.city || business.address || 'Location not specified',
+        price_range: 'R100-R1000', // Default - you can calculate from services
+        availability: 'Mon-Fri 9AM-6PM' // Default - you can fetch from business_hours table
+      }))
       
-      setProviders(mockProviders)
-      setRecentlyViewed(mockProviders.slice(0, 2))
-      setFavorites(mockProviders.slice(0, 1))
+      setProviders(realProviders)
+      setRecentlyViewed(realProviders.slice(0, 2))
+      setFavorites(realProviders.slice(0, 1))
       
       console.log('✅ All data set successfully')
       setConnectionStatus('connected')

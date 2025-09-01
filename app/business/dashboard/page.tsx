@@ -128,53 +128,43 @@ export default function BusinessDashboard() {
       }
       console.log('✅ Staff fetched:', staffData?.length || 0)
 
-      // Fetch support tickets (if table exists)
+      // Fetch support tickets
       console.log('🎫 Fetching support tickets...')
-      let ticketsData = []
-      try {
-        const { data: tickets, error: ticketsError } = await supabase
-          .from('support_tickets')
-          .select('*')
-          .order('created_at', { ascending: false })
-        
-        if (!ticketsError) {
-          ticketsData = tickets || []
-          console.log('✅ Support tickets fetched:', ticketsData.length)
-        } else {
-          console.log('⚠️ Support tickets table not accessible:', ticketsError.message)
-        }
-      } catch (e) {
-        console.log('⚠️ Support tickets table might not exist yet')
-        ticketsData = []
-      }
+      const { data: ticketsData, error: ticketsError } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-      // Fetch reviews (if table exists)
-      console.log('⭐ Fetching reviews...')
-      let reviewsData = []
-      try {
-        const { data: reviews, error: reviewsError } = await supabase
-          .from('reviews')
-          .select('*')
-          .order('created_at', { ascending: false })
-        
-        if (!reviewsError) {
-          reviewsData = reviews || []
-          console.log('✅ Reviews fetched:', reviewsData.length)
-        } else {
-          console.log('⚠️ Reviews table not accessible:', reviewsError.message)
-        }
-      } catch (e) {
-        console.log('⚠️ Reviews table might not exist yet')
-        reviewsData = []
+      if (ticketsError) {
+        console.error('❌ Support tickets error:', ticketsError)
+        throw new Error(`Support tickets fetch failed: ${ticketsError.message}`)
       }
+      console.log('✅ Support tickets fetched:', ticketsData?.length || 0)
+
+      // Fetch reviews
+      console.log('⭐ Fetching reviews...')
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (reviewsError) {
+        console.error('❌ Reviews error:', reviewsError)
+        throw new Error(`Reviews fetch failed: ${reviewsError.message}`)
+      }
+      console.log('✅ Reviews fetched:', reviewsData?.length || 0)
 
       // Calculate business stats
       console.log('📊 Calculating business stats...')
       const totalBookings = bookingsData?.length || 0
+      
+      // Calculate real revenue from services and bookings
       const totalRevenue = bookingsData?.reduce((sum, booking) => {
-        // For now, use a mock price since we don't have service relationship
-        return sum + 150 // Mock price per booking
+        // Find the service for this booking
+        const service = servicesData?.find(s => s.id === booking.service_id)
+        return sum + (service?.price || 0)
       }, 0) || 0
+      
       const totalCustomers = usersData?.length || 0
       const averageRating = reviewsData?.length > 0 
         ? (reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewsData.length).toFixed(1)
@@ -441,39 +431,45 @@ export default function BusinessDashboard() {
                 </CardHeader>
                                  <CardContent>
                    <div className="space-y-4">
-                     {bookings.slice(0, 3).map((booking, index) => (
-                       <div key={booking.id || index} className="flex items-center justify-between p-3 border rounded-lg">
-                         <div className="flex-1">
-                           <p className="font-medium">{booking.users?.name || 'Unknown Customer'}</p>
-                           <p className="text-sm text-muted-foreground">
-                             {new Date(booking.booking_date).toLocaleDateString()} at {booking.booking_time}
-                           </p>
-                           <p className="text-sm text-muted-foreground">
-                             {booking.services?.name || 'Unknown Service'}
-                           </p>
+                     {bookings.slice(0, 3).map((booking, index) => {
+                       // Find the customer and service for this booking
+                       const customer = users?.find(u => u.id === booking.user_id)
+                       const service = services?.find(s => s.id === booking.service_id)
+                       
+                       return (
+                         <div key={booking.id || index} className="flex items-center justify-between p-3 border rounded-lg">
+                           <div className="flex-1">
+                             <p className="font-medium">{customer?.name || 'Unknown Customer'}</p>
+                             <p className="text-sm text-muted-foreground">
+                               {new Date(booking.booking_date).toLocaleDateString()} at {booking.booking_time}
+                             </p>
+                             <p className="text-sm text-muted-foreground">
+                               {service?.name || 'Unknown Service'}
+                             </p>
+                           </div>
+                           <div className="text-right">
+                             <Badge className={`${
+                               booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                               booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                               'bg-gray-100 text-gray-800'
+                             }`}>
+                               {booking.status || 'Unknown'}
+                             </Badge>
+                             <p className="text-sm font-medium mt-1">
+                               R{service?.price || 0}
+                             </p>
+                             <Button 
+                               variant="outline" 
+                               size="sm" 
+                               className="mt-2"
+                               onClick={() => handleEdit('booking', booking)}
+                             >
+                               <Edit className="h-4 w-4" />
+                             </Button>
+                           </div>
                          </div>
-                         <div className="text-right">
-                           <Badge className={`${
-                             booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                             booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                             'bg-gray-100 text-gray-800'
-                           }`}>
-                             {booking.status || 'Unknown'}
-                           </Badge>
-                           <p className="text-sm font-medium mt-1">
-                             R{booking.services?.price || 0}
-                           </p>
-                           <Button 
-                             variant="outline" 
-                             size="sm" 
-                             className="mt-2"
-                             onClick={() => handleEdit('booking', booking)}
-                           >
-                             <Edit className="h-4 w-4" />
-                           </Button>
-                         </div>
-                       </div>
-                     ))}
+                       )
+                     })}
                      {bookings.length === 0 && (
                        <div className="text-center py-4 text-muted-foreground">
                          {connectionStatus === 'connected' ? 'No bookings yet' : 'Database connection required to view bookings'}
@@ -542,39 +538,49 @@ export default function BusinessDashboard() {
               </CardHeader>
                              <CardContent>
                  <div className="space-y-4">
-                   {bookings.map((booking, index) => (
-                     <div key={booking.id || index} className="flex items-center justify-between p-4 border rounded-lg">
-                       <div className="flex-1">
-                         <div className="flex items-center space-x-4">
-                           <div>
-                             <p className="font-medium">{booking.users?.name || 'Unknown Customer'}</p>
-                             <p className="text-sm text-muted-foreground">{booking.users?.email || 'No email'}</p>
-                             <p className="text-sm text-muted-foreground">{booking.users?.phone || 'No phone'}</p>
-                           </div>
-                           <div className="text-sm text-muted-foreground">
-                             <p>{new Date(booking.booking_date).toLocaleDateString()}</p>
-                             <p>{booking.booking_time}</p>
+                   {bookings.map((booking, index) => {
+                     // Find the customer and service for this booking
+                     const customer = users?.find(u => u.id === booking.user_id)
+                     const service = services?.find(s => s.id === booking.service_id)
+                     
+                     return (
+                       <div key={booking.id || index} className="flex items-center justify-between p-4 border rounded-lg">
+                         <div className="flex-1">
+                           <div className="flex items-center space-x-4">
+                             <div>
+                               <p className="font-medium">{customer?.name || 'Unknown Customer'}</p>
+                               <p className="text-sm text-muted-foreground">{customer?.email || 'No email'}</p>
+                               <p className="text-sm text-muted-foreground">{customer?.phone || 'No phone'}</p>
+                             </div>
+                             <div className="text-sm text-muted-foreground">
+                               <p>{new Date(booking.booking_date).toLocaleDateString()}</p>
+                               <p>{booking.booking_time}</p>
+                             </div>
                            </div>
                          </div>
+                         <div className="flex items-center space-x-2">
+                           <Badge className={`${
+                             booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                             booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                             'bg-gray-100 text-gray-800'
+                           }`}>
+                             {booking.status || 'Unknown'}
+                           </Badge>
+                           <p className="font-medium">R{service?.price || 0}</p>
+                           <Button variant="outline" size="sm">
+                             <Eye className="h-4 w-4" />
+                           </Button>
+                           <Button 
+                             variant="outline" 
+                             size="sm"
+                             onClick={() => handleEdit('booking', booking)}
+                           >
+                             <Edit className="h-4 w-4" />
+                           </Button>
+                         </div>
                        </div>
-                       <div className="flex items-center space-x-2">
-                         <Badge className={`${
-                           booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                           booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                           'bg-gray-100 text-gray-800'
-                         }`}>
-                           {booking.status || 'Unknown'}
-                         </Badge>
-                         <p className="font-medium">R{booking.services?.price || 0}</p>
-                         <Button variant="outline" size="sm">
-                           <Eye className="h-4 w-4" />
-                         </Button>
-                         <Button variant="outline" size="sm">
-                           <Edit className="h-4 w-4" />
-                         </Button>
-                       </div>
-                     </div>
-                   ))}
+                     )
+                   })}
                    {bookings.length === 0 && (
                      <div className="text-center py-8 text-muted-foreground">
                        No bookings found
@@ -637,7 +643,7 @@ export default function BusinessDashboard() {
                                <span>Revenue:</span>
                                <span className="font-medium">
                                  R{bookings.filter(b => b.service_id === service.id)
-                                   .reduce((sum, b) => sum + (b.services?.price || 0), 0)}
+                                   .reduce((sum, b) => sum + (service.price || 0), 0)}
                                </span>
                              </div>
                            </div>
