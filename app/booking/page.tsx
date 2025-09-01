@@ -55,6 +55,7 @@ export default function BookingPage() {
   
   const [business, setBusiness] = useState<Business | null>(null)
   const [service, setService] = useState<Service | null>(null)
+  const [availableServices, setAvailableServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   
@@ -112,7 +113,7 @@ export default function BookingPage() {
 
         setBusiness(serviceData.business)
       } else if (businessId) {
-        // Fetch business details only
+        // Fetch business details and available services
         const { data: businessData, error: businessError } = await supabase
           .from('businesses')
           .select('*')
@@ -122,6 +123,26 @@ export default function BookingPage() {
         if (businessError) throw businessError
 
         setBusiness(businessData)
+
+        // Fetch available services for this business
+        const { data: servicesData, error: servicesError } = await supabase
+          .from('services')
+          .select('*')
+          .eq('business_id', businessId)
+          .eq('is_active', true)
+
+        if (!servicesError && servicesData) {
+          setAvailableServices(servicesData.map(service => ({
+            id: service.id,
+            name: service.name,
+            description: service.description,
+            price: service.price,
+            duration: service.duration,
+            category: service.category_id,
+            business_id: service.business_id,
+            business_name: businessData.name
+          })))
+        }
       }
 
     } catch (error) {
@@ -143,7 +164,7 @@ export default function BookingPage() {
         throw new Error("Business information is missing")
       }
       if (!service?.id) {
-        throw new Error("Service information is missing")
+        throw new Error("Please select a service to book")
       }
       if (!bookingDate) {
         throw new Error("Please select a booking date")
@@ -298,6 +319,46 @@ export default function BookingPage() {
                             R{service.price}
                           </span>
                         </div>
+                      </div>
+                    )}
+                    {!service && availableServices.length > 0 && (
+                      <div className="space-y-3">
+                        <Label htmlFor="service">Select a Service</Label>
+                        <Select onValueChange={(value) => {
+                          const selectedService = availableServices.find(s => s.id === value)
+                          if (selectedService) {
+                            setService(selectedService)
+                          }
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a service to book" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableServices.map((service) => (
+                              <SelectItem key={service.id} value={service.id}>
+                                <div className="flex justify-between items-center w-full">
+                                  <span>{service.name}</span>
+                                  <span className="text-sm text-muted-foreground">R{service.price}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {service && (
+                          <div className="mt-3 p-3 bg-background border rounded">
+                            <p className="text-sm text-muted-foreground">{service.description}</p>
+                            <div className="flex items-center space-x-4 text-sm mt-2">
+                              <span className="flex items-center">
+                                <Clock className="h-4 w-4 mr-1" />
+                                {service.duration} minutes
+                              </span>
+                              <span className="flex items-center font-semibold">
+                                <DollarSign className="h-4 w-4 mr-1" />
+                                R{service.price}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {business && (
